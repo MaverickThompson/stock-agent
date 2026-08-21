@@ -1,0 +1,18 @@
+# Market data. ~500 CSVs of licensed price history, and none of it is mine to
+# redistribute. `python scripts/fetch_data.py` rebuilds this directory.
+data/
+
+# Reference PDFs live one level up in `reference/` and are copyrighted
+# textbooks. Cited in the README, never shipped.
+
+# Backtest output.
+out_*.csv
+logs/
+
+# Python build artifacts.
+__pycache__/
+*.pyc
+*.egg-info/
+.pytest_cache/
+build/
+dist/

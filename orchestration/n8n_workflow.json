@@ -1,0 +1,205 @@
+{
+  "name": "stock-agent daily",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "30 16 * * 1-5"
+            }
+          ]
+        }
+      },
+      "id": "schedule",
+      "name": "Weekdays 16:30",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [-560, 300],
+      "notes": "After the US close. Running intraday feeds the HMM a partial bar, which reads as a low-volatility observation."
+    },
+    {
+      "parameters": {
+        "command": "cd {{$env.STOCKAGENT_HOME}} && python scripts/fetch_data.py"
+      },
+      "id": "fetch",
+      "name": "Fetch Data",
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [-340, 300],
+      "onError": "continueErrorOutput",
+      "notes": "Exit 1 means at least one symbol failed. Stale prices must never reach a decision."
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "version": 2 },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.exitCode }}",
+              "rightValue": 0,
+              "operator": { "type": "number", "operation": "equals" }
+            }
+          ],
+          "combinator": "and"
+        }
+      },
+      "id": "fetch_ok",
+      "name": "Fetch OK?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [-120, 300]
+    },
+    {
+      "parameters": {
+        "command": "cd {{$env.STOCKAGENT_HOME}} && python -m stockagent regime SPY"
+      },
+      "id": "regime",
+      "name": "Regime Scan",
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [100, 200],
+      "notes": "Market-wide regime read. Drives whether any long exposure is warranted at all."
+    },
+    {
+      "parameters": {
+        "command": "cd {{$env.STOCKAGENT_HOME}} && python -m stockagent scan --top 10"
+      },
+      "id": "scan",
+      "name": "Watchlist",
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [100, 400],
+      "notes": "Agent 3 ranking. A screen, not a thesis."
+    },
+    {
+      "parameters": {
+        "mode": "combine",
+        "combineBy": "combineAll",
+        "options": {}
+      },
+      "id": "merge",
+      "name": "Merge",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3,
+      "position": [320, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Symbols to run the full five-agent debate over.\n// Keep this short: each debate refits the HMM.\nconst symbols = (process.env.STOCKAGENT_SYMBOLS || 'SPY,QQQ').split(',');\nreturn symbols.map(s => ({ json: { symbol: s.trim() } }));"
+      },
+      "id": "symbols",
+      "name": "Symbols",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [540, 300]
+    },
+    {
+      "parameters": {
+        "command": "cd {{$env.STOCKAGENT_HOME}} && python -m stockagent analyze {{ $json.symbol }} --equity {{$env.STOCKAGENT_EQUITY || 10000}} --json artifacts/{{ $json.symbol }}_debate.json"
+      },
+      "id": "analyze",
+      "name": "Five-Agent Debate",
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [760, 300],
+      "onError": "continueErrorOutput",
+      "notes": "Exit 0 = Manager APPROVED. Exit 2 = rejected or hold (the normal outcome). Exit 1 = error."
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "version": 2 },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.exitCode }}",
+              "rightValue": 0,
+              "operator": { "type": "number", "operation": "equals" }
+            }
+          ],
+          "combinator": "and"
+        }
+      },
+      "id": "approved",
+      "name": "Manager Approved?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [980, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Approved recommendations go to a human. Nothing here places an order.\nreturn items.map(i => ({\n  json: {\n    status: 'AWAITING_HUMAN_REVIEW',\n    symbol: i.json.symbol,\n    output: i.json.stdout,\n    reviewed_at: null,\n    note: 'Place the order manually. Verify the stop is with the broker, not mental.'\n  }\n}));"
+      },
+      "id": "review",
+      "name": "Human Review Queue",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1200, 200]
+    },
+    {
+      "parameters": {
+        "jsCode": "// The common path. Rejections are the system working, not failing.\nreturn items.map(i => ({\n  json: { status: 'NO_ACTION', symbol: i.json.symbol, detail: i.json.stdout }\n}));"
+      },
+      "id": "noaction",
+      "name": "Log No-Action",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1200, 400]
+    },
+    {
+      "parameters": {
+        "jsCode": "return [{ json: {\n  severity: 'ERROR',\n  stage: 'fetch_data',\n  message: 'Price download failed. Analysis skipped: stale data must never reach a decision.',\n  detail: items[0]?.json?.stderr || ''\n} }];"
+      },
+      "id": "alert",
+      "name": "Alert: Data Failure",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [100, 560]
+    }
+  ],
+  "connections": {
+    "Weekdays 16:30": { "main": [[{ "node": "Fetch Data", "type": "main", "index": 0 }]] },
+    "Fetch Data": {
+      "main": [
+        [{ "node": "Fetch OK?", "type": "main", "index": 0 }],
+        [{ "node": "Alert: Data Failure", "type": "main", "index": 0 }]
+      ]
+    },
+    "Fetch OK?": {
+      "main": [
+        [
+          { "node": "Regime Scan", "type": "main", "index": 0 },
+          { "node": "Watchlist", "type": "main", "index": 0 }
+        ],
+        [{ "node": "Alert: Data Failure", "type": "main", "index": 0 }]
+      ]
+    },
+    "Regime Scan": { "main": [[{ "node": "Merge", "type": "main", "index": 0 }]] },
+    "Watchlist": { "main": [[{ "node": "Merge", "type": "main", "index": 1 }]] },
+    "Merge": { "main": [[{ "node": "Symbols", "type": "main", "index": 0 }]] },
+    "Symbols": { "main": [[{ "node": "Five-Agent Debate", "type": "main", "index": 0 }]] },
+    "Five-Agent Debate": {
+      "main": [
+        [{ "node": "Manager Approved?", "type": "main", "index": 0 }],
+        [{ "node": "Log No-Action", "type": "main", "index": 0 }]
+      ]
+    },
+    "Manager Approved?": {
+      "main": [
+        [{ "node": "Human Review Queue", "type": "main", "index": 0 }],
+        [{ "node": "Log No-Action", "type": "main", "index": 0 }]
+      ]
+    }
+  },
+  "settings": { "executionOrder": "v1" },
+  "tags": [{ "name": "stock-agent" }],
+  "meta": {
+    "description": "Daily HMM regime scan and five-agent review. Produces analysis only; no node in this workflow places an order.",
+    "environment": {
+      "STOCKAGENT_HOME": "absolute path to the stock-agent directory",
+      "STOCKAGENT_SYMBOLS": "comma-separated symbols to analyse, e.g. SPY,QQQ",
+      "STOCKAGENT_EQUITY": "account equity used for position sizing"
+    }
+  }
+}
