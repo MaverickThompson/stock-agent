@@ -493,3 +493,9 @@ Stated plainly, because unlisted limitations are the ones that hurt.
   repository. Execution is manual and human.
 
 Not financial advice. Analysis is probabilistic. No outcome is guaranteed.
+
+## Method reference
+
+The Hidden Markov Model implementation follows Jurafsky & Martin, Speech and
+Language Processing, 3rd ed. draft, Appendix A: Hidden Markov Models.
+https://web.stanford.edu/~jurafsky/slp3/
