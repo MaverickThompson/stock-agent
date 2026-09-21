@@ -61,3 +61,53 @@ module signatures could be read.
 
 Both are interpretations made before day 1, which Section 11 permits. They
 should be written into Section 12 so they are on the record.
+
+---
+
+# Round 2 — 2026-09-21, the adapter
+
+`study_adapter.py` and `earnings.py` added. **77 tests pass.**
+
+## New files
+
+| File | What |
+|---|---|
+| `src/stockagent/earnings.py` | Alpha Vantage earnings calendar for the Section 5 48h blackout. Cached daily. |
+| `src/stockagent/study_adapter.py` | Bridges DiscoveryAgent / analyze_symbol to the session's Candidate and Thesis. |
+| `tests/test_earnings_and_adapter.py` | 13 tests, mostly on the failure direction of the earnings gate. |
+
+## New secret required
+
+`ALPHAVANTAGE_API_KEY` in the stock-agent repo's Actions secrets. Free tier is
+enough — one request per session covers the whole market for 3 months.
+
+Without it the calendar is unavailable, every candidate is rejected with an
+honest reason, and no trades are taken. That is deliberate.
+
+## FOUR MAPPINGS FIXED BEFORE DAY 1 — copy these into Section 12
+
+1. **Predicted probability = `verdict.confidence`.** Section 5 asks for a
+   predicted probability of reaching Target 1; the debate produces a manager
+   confidence. They are not necessarily the same quantity. Mapping fixed in
+   advance.
+
+2. **Entry zone = entry +/- 10% of the risk distance** (`entry - stop`).
+   `TradeIdea` gives one entry price; Section 5 requires a zone. Scaling to the
+   trade's own risk rather than a flat percentage means it behaves the same on
+   a $20 stock and a $600 one, and it protects the R:R gate directly — paying
+   more than a tenth of your risk above plan erodes the 2:1 the trade was
+   approved on.
+
+3. **Falsification = the manager's `conditions` when present**, else a daily
+   close through the stop.
+
+4. **An unknown earnings position FAILS the gate.** If the calendar could not
+   be consulted the candidate is rejected, never entered. "We could not check"
+   is not a way of satisfying "no earnings within 48 hours".
+
+Plus the two from round 1: the round-number-stop definition, and stop-beats-
+target when a bar touches both.
+
+Six interpretations total. All made before day 1, which Section 11 permits —
+but they belong in Section 12 so they are on the record rather than discovered
+in the code later.
