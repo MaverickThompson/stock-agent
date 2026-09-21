@@ -12,5 +12,13 @@ requests>=2.31
 # Optional: charts for backtest output.
 matplotlib>=3.8
 
+# Broker and market data for the 60-day study. Section 7 names an Alpaca
+# paper account with broker-side order records as the intended venue.
+alpaca-py>=0.33
+
+# Error alerting for unattended sessions. A session that dies quietly puts a
+# hole in the study that has to be disclosed; see src/stockagent/observability.py.
+sentry-sdk>=2.0
+
 # Development.
 pytest>=7.4

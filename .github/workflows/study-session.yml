@@ -1,0 +1,71 @@
+name: Study session
+
+# One session per US market day for the 60-day study.
+#
+# 14:45 UTC is ~15 minutes after the US open during EDT and ~45 minutes after
+# it during EST. The window runs across the November DST change, so a single
+# fixed UTC time necessarily drifts relative to the open; a fixed time that
+# drifts is preferable to changing the schedule mid-study, which Section 11
+# would treat as an amendment.
+#
+# The job checks the broker clock and logs a SYSTEM_ERROR row if the market is
+# closed, so holidays are recorded rather than silently skipped.
+
+on:
+  schedule:
+    - cron: "45 14 * * 1-5"
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Dry run: evaluate and log, place no orders"
+        type: boolean
+        default: false
+
+concurrency:
+  group: study-session
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  session:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install -e .
+
+      - name: Run session
+        env:
+          ALPACA_API_KEY: ${{ secrets.ALPACA_API_KEY }}
+          ALPACA_SECRET_KEY: ${{ secrets.ALPACA_SECRET_KEY }}
+          SENTRY_DSN: ${{ secrets.SENTRY_DSN }}
+          STUDY_DRY_RUN: ${{ inputs.dry_run }}
+        run: python scripts/run_session.py
+
+      # Committed even on failure: Section 10 requires the SYSTEM_ERROR row
+      # describing the failure to survive, and a lost log is worse than a
+      # failed session.
+      - name: Commit the logs
+        if: always()
+        run: |
+          git config user.name "study-session"
+          git config user.email "study-session@users.noreply.github.com"
+          git add -A study/ || true
+          if git diff --staged --quiet; then
+            echo "no log rows this session"
+          else
+            git commit -m "study: session $(date -u +%Y-%m-%d)"
+            git push
+          fi
