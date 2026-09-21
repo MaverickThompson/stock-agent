@@ -137,8 +137,13 @@ def run_session(*, broker: BrokerLike, log: StudyLog,
                 sector_weights: dict[str, float] | None = None,
                 now: dt.datetime | None = None,
                 falsified: Callable[[OpenPosition], bool] | None = None,
+                dry_run: bool = False,
                 ) -> SessionResult:
-    """Execute one session. Never raises for a per-symbol failure -- it logs."""
+    """Execute one session. Never raises for a per-symbol failure -- it logs.
+
+    When ``dry_run`` is set, market and account data are still read and every
+    decision is logged, but no order or local position/trade state is changed.
+    """
     now = now or dt.datetime.now(dt.timezone.utc)
     sector_weights = dict(sector_weights or {})
     result = SessionResult()
@@ -161,6 +166,14 @@ def run_session(*, broker: BrokerLike, log: StudyLog,
                 continue
             reason, qty = decision
             qty = min(qty, position.remaining)
+            if dry_run:
+                log.log_signal(ticker=position.ticker, signal_type="exit",
+                               triggered_rule=reason, action_taken="SKIPPED",
+                               price_at_signal=quote.bid,
+                               notes=f"dry run: would exit {qty} of "
+                                     f"{position.remaining}; quote {quote.timestamp}")
+                result.skipped += 1
+                continue
             fill = broker.submit(position.ticker, qty, "sell", quote=quote)
             log.close_trade(
                 entry_timestamp=position.entry_timestamp, ticker=position.ticker,
@@ -241,6 +254,14 @@ def run_session(*, broker: BrokerLike, log: StudyLog,
                 continue
 
             size = rules.position_size(nlv, quote.ask, thesis.stop)
+            if dry_run:
+                log.log_signal(ticker=candidate.symbol, signal_type="entry_candidate",
+                               triggered_rule="section5_gate", action_taken="SKIPPED",
+                               price_at_signal=quote.ask,
+                               notes=f"dry run: would enter {size} shares; "
+                                     f"stop {thesis.stop:.2f}; quote {quote.timestamp}")
+                result.skipped += 1
+                continue
             fill = broker.submit(candidate.symbol, size, "buy", quote=quote)
             thesis_text = thesis.as_text()
 

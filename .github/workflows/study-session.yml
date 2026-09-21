@@ -46,6 +46,12 @@ jobs:
           pip install -r requirements.txt
           pip install -e .
 
+      # ``data/`` is deliberately ignored because price history cannot be
+      # redistributed. A clean Actions checkout must populate it before the
+      # adapter ranks the universe.
+      - name: Fetch market data
+        run: python scripts/fetch_data.py
+
       - name: Run session
         env:
           ALPACA_API_KEY: ${{ secrets.ALPACA_API_KEY }}
