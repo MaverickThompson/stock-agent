@@ -56,6 +56,7 @@ jobs:
         env:
           ALPACA_API_KEY: ${{ secrets.ALPACA_API_KEY }}
           ALPACA_SECRET_KEY: ${{ secrets.ALPACA_SECRET_KEY }}
+          ALPHAVANTAGE_API_KEY: ${{ secrets.ALPHAVANTAGE_API_KEY }}
           SENTRY_DSN: ${{ secrets.SENTRY_DSN }}
           STUDY_DRY_RUN: ${{ inputs.dry_run }}
         run: python scripts/run_session.py

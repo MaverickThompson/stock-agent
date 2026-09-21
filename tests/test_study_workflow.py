@@ -18,3 +18,10 @@ def test_session_fetches_price_history_before_running() -> None:
     session = workflow.index("python scripts/run_session.py")
 
     assert fetch < session
+
+
+def test_session_exposes_the_earnings_calendar_secret() -> None:
+    """Candidate evaluation needs the calendar rather than an unknown fallback."""
+    workflow = WORKFLOW.read_text(encoding="utf-8")
+
+    assert "ALPHAVANTAGE_API_KEY: ${{ secrets.ALPHAVANTAGE_API_KEY }}" in workflow
