@@ -22,3 +22,6 @@ sentry-sdk>=2.0
 
 # Development.
 pytest>=7.4
+
+# Coverage, reported to Codecov by .github/workflows/tests.yml.
+pytest-cov>=5.0

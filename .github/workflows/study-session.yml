@@ -69,7 +69,9 @@ jobs:
         run: |
           git config user.name "study-session"
           git config user.email "study-session@users.noreply.github.com"
-          git add -A study/ || true
+          # Section 10 defines exactly two logs. The earnings calendar is a
+          # cache and is gitignored, so it is never added here.
+          git add study/signals.csv study/trades.csv || true
           if git diff --staged --quiet; then
             echo "no log rows this session"
           else

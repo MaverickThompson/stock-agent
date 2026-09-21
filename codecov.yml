@@ -1,0 +1,35 @@
+# Codecov configuration.
+#
+# The study modules are the ones whose behaviour is pre-registered, so they are
+# the ones where a coverage drop matters. The research/backtest code is
+# exploratory and is deliberately not held to the same bar.
+
+coverage:
+  status:
+    project:
+      default:
+        target: auto
+        threshold: 2%
+    patch:
+      default:
+        target: 80%
+        threshold: 0%
+
+  range: 70..95
+  precision: 1
+  round: down
+
+comment:
+  layout: "reach, diff, flags, files"
+  behavior: default
+  require_changes: true
+
+flags:
+  unittests:
+    paths:
+      - src/stockagent/
+
+ignore:
+  - "tests/"
+  - "scripts/"
+  - "**/__init__.py"

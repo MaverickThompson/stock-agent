@@ -16,3 +16,19 @@ __pycache__/
 .pytest_cache/
 build/
 dist/
+
+# Coverage output (reported to Codecov, never committed).
+.coverage
+.coverage.*
+coverage.xml
+htmlcov/
+
+# JetBrains. PyCharm rewrites these constantly; shared run configs live in
+# `.run/` instead, which IS committed.
+.idea/
+*.iml
+
+# Earnings calendar is a 24h CACHE, not a study log. Section 10 defines exactly
+# two logs -- signals.csv and trades.csv -- and a 4,200-line calendar recommitted
+# every session would bury them in the history.
+study/earnings_calendar.csv

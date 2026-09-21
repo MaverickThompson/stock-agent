@@ -1,0 +1,19 @@
+<component name="ProjectRunConfigurationManager">
+  <configuration default="false" name="Study session (DRY RUN)" type="PythonConfigurationType" factoryName="Python">
+    <module name="stock-agent" />
+    <option name="ENV_FILES" value="" />
+    <envs>
+      <env name="PYTHONUNBUFFERED" value="1" />
+      <env name="STUDY_DRY_RUN" value="true" />
+    </envs>
+    <option name="SDK_HOME" value="" />
+    <option name="WORKING_DIRECTORY" value="$PROJECT_DIR$" />
+    <option name="IS_MODULE_SDK" value="true" />
+    <option name="ADD_CONTENT_ROOTS" value="true" />
+    <option name="ADD_SOURCE_ROOTS" value="true" />
+    <option name="SCRIPT_NAME" value="$PROJECT_DIR$/scripts/run_session.py" />
+    <option name="PARAMETERS" value="" />
+    <option name="EMULATE_TERMINAL" value="true" />
+    <method v="2" />
+  </configuration>
+</component>
