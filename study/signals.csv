@@ -2,3 +2,6 @@ timestamp,ticker,signal_type,triggered_rule,action_taken,reason_if_rejected,pric
 2026-09-21T16:34:40Z,BTC,entry_candidate,layer2_debate,REJECTED,layer 2 produced no thesis,,
 2026-09-21T16:35:00Z,QQQ,entry_candidate,section5_gate,REJECTED,R:R 1.49 below the 2.0 floor,739.25,quote 2026-09-21T16:34:59Z
 2026-09-21T16:35:14Z,SPY,entry_candidate,layer2_debate,REJECTED,layer 2 produced no thesis,,
+2026-09-21T19:45:00Z,QQQ,entry_candidate,section5_gate,REJECTED,R:R 1.50 below the 2.0 floor,742.54,quote 2026-09-21T19:45:00Z
+2026-09-21T19:45:22Z,BTC,entry_candidate,layer2_debate,REJECTED,layer 2 produced no thesis,,
+2026-09-21T19:45:37Z,SPY,entry_candidate,layer2_debate,REJECTED,layer 2 produced no thesis,,
