@@ -1,0 +1,51 @@
+name: Broker smoke test
+
+# NOT part of the study. Runs scripts/smoke_broker.py, which writes nothing to
+# study/ and logs no signals or trades.
+#
+# It exists because the 2026-09-21 dry run rejected all three candidates at the
+# Section 5 gates, so AlpacaBroker.submit() has never executed. Coverage on
+# broker.py is 0%. This proves the order path before the first unattended
+# session has to rely on it.
+#
+# Manual only -- there is deliberately no schedule.
+
+on:
+  workflow_dispatch:
+    inputs:
+      place_order:
+        description: "Place a real paper order (buy 1 SPY, then sell it back). Leave off for connection checks only."
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install -e .
+
+      - name: Smoke test
+        env:
+          ALPACA_API_KEY: ${{ secrets.ALPACA_API_KEY }}
+          ALPACA_SECRET_KEY: ${{ secrets.ALPACA_SECRET_KEY }}
+        run: |
+          if [ "${{ inputs.place_order }}" = "true" ]; then
+            python scripts/smoke_broker.py --order
+          else
+            python scripts/smoke_broker.py
+          fi

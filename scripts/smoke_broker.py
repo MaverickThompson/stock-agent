@@ -16,9 +16,9 @@ before day 1, then never again.
     python scripts/smoke_broker.py            # checks only, places nothing
     python scripts/smoke_broker.py --order    # also places 1 share of SPY
 
-Anything it buys stays in the paper account as an untracked position; sell it in
-the Alpaca web UI afterwards so day 1 starts from a clean book (Section 12
-asserts zero open positions before day 1).
+It buys one share and sells it again in the same run, then asserts the book is
+flat -- Section 12 asserts zero open positions before day 1, so the smoke test
+must not leave one behind.
 """
 
 from __future__ import annotations
@@ -74,15 +74,34 @@ def main() -> int:
         print("\nmarket is closed; refusing to submit. Rerun during market hours.")
         return 1
 
-    print(f"6. submitting 1 share of {SYMBOL} (paper) ...")
+    print(f"6. BUY 1 {SYMBOL} (paper) ...")
     try:
-        fill = broker.submit(SYMBOL, 1, "buy")
+        bought = broker.submit(SYMBOL, 1, "buy")
     except BrokerError as exc:
-        print(f"   FAILED: {type(exc).__name__}: {exc}")
+        print(f"   BUY FAILED: {type(exc).__name__}: {exc}")
         return 1
-    print(f"   FILLED: {fill}")
-    print("\nORDER PATH PROVEN. Now sell this share in the Alpaca UI so the")
-    print("study starts from zero open positions.")
+    print(f"   FILLED: {bought}")
+
+    # Round-trip immediately. Section 12 asserts zero open positions before
+    # day 1, so the smoke test must not leave one behind. Selling also proves
+    # the other half of the order path, which an entry-only test would miss.
+    print(f"7. SELL 1 {SYMBOL} (paper) ...")
+    try:
+        sold = broker.submit(SYMBOL, 1, "sell")
+    except BrokerError as exc:
+        print(f"   SELL FAILED: {type(exc).__name__}: {exc}")
+        print("   !! 1 share is still open. Close it in the Alpaca UI before day 1.")
+        return 1
+    print(f"   FILLED: {sold}")
+
+    print("8. confirming the book is flat ...")
+    remaining = broker.positions()
+    print(f"   positions = {remaining or '(none)'}")
+    if remaining.get(SYMBOL):
+        print("   !! NOT FLAT. Close it in the Alpaca UI before day 1.")
+        return 1
+
+    print("\nORDER PATH PROVEN, both sides, book flat. Nothing was written to study/.")
     return 0
 
 

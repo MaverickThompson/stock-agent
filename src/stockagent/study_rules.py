@@ -15,6 +15,8 @@ window; Section 11 forbids parameter changes motivated by results or deadlines.
 
 from __future__ import annotations
 
+import datetime as dt
+
 import dataclasses
 import math
 from typing import Final
@@ -32,6 +34,12 @@ MIN_REWARD_TO_RISK: Final[float] = 2.0
 PROBABILITY_EDGE_REQUIRED: Final[float] = 0.10   # +10 percentage points
 EARNINGS_BLACKOUT_HOURS: Final[float] = 48.0
 TIME_STOP_DAYS: Final[int] = 45
+
+# Section 12 study window. The cron in study-session.yml has no end date -- it
+# would keep opening positions indefinitely -- so the boundary is enforced here,
+# where it cannot be forgotten.
+STUDY_DAY_1: Final[dt.date] = dt.date(2026, 9, 23)
+STUDY_DAY_60: Final[dt.date] = dt.date(2026, 12, 16)
 
 #: Section 5 prohibits "round-number stops" without defining the term. This
 #: implementation treats a stop within a cent of a whole or half dollar as

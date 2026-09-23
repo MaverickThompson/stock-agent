@@ -146,3 +146,16 @@ def test_falsification_falls_back_to_the_stop():
     assert a.falsification_for(None, 96.4) == "daily close below 96.40"
     assert a.falsification_for([], 96.4) == "daily close below 96.40"
     assert a.falsification_for(["  "], 96.4) == "daily close below 96.40"
+
+
+def test_section3_excludes_non_equity_symbols():
+    """Section 3 restricts the universe to US-listed common equities.
+
+    VIX is an index and BTC is a crypto pair whose local name collides with a
+    real NYSE ticker -- on 2026-09-22 that collision quoted a ~$38 ETF against
+    a stop derived from $81,000 crypto bars. Neither may reach layer 1.
+    """
+    from stockagent.study_adapter import NON_EQUITY_SYMBOLS
+    assert "VIX" in NON_EQUITY_SYMBOLS
+    assert "BTC" in NON_EQUITY_SYMBOLS
+    assert "AAPL" not in NON_EQUITY_SYMBOLS
