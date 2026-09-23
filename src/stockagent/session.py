@@ -137,11 +137,30 @@ def run_session(*, broker: BrokerLike, log: StudyLog,
                 sector_weights: dict[str, float] | None = None,
                 now: dt.datetime | None = None,
                 falsified: Callable[[OpenPosition], bool] | None = None,
+                dry_run: bool = False,
                 ) -> SessionResult:
-    """Execute one session. Never raises for a per-symbol failure -- it logs."""
+    """Execute one session. Never raises for a per-symbol failure -- it logs.
+
+    When ``dry_run`` is set, market and account data are still read and every
+    decision is logged, but no order or local position/trade state is changed.
+    """
     now = now or dt.datetime.now(dt.timezone.utc)
     sector_weights = dict(sector_weights or {})
     result = SessionResult()
+
+    # ---- Section 12 window boundary -------------------------------------
+    # Section 5: "End of study window: marked to market, reported separately
+    # from closed trades." Positions open on the final day are NOT force-closed
+    # -- they are marked and reported as open. After the window the session is
+    # inert: no entries, no exits, nothing that could contaminate the record.
+    today = now.date()
+    if today > rules.STUDY_DAY_60:
+        log.log_system_error(
+            stage="window_closed",
+            detail=f"study window ended {rules.STUDY_DAY_60.isoformat()}; "
+                   f"session on {today.isoformat()} took no action")
+        return result
+    final_day = today == rules.STUDY_DAY_60
 
     if not broker.market_is_open():
         log.log_system_error(stage="market_closed",
@@ -161,6 +180,14 @@ def run_session(*, broker: BrokerLike, log: StudyLog,
                 continue
             reason, qty = decision
             qty = min(qty, position.remaining)
+            if dry_run:
+                log.log_signal(ticker=position.ticker, signal_type="exit",
+                               triggered_rule=reason, action_taken="SKIPPED",
+                               price_at_signal=quote.bid,
+                               notes=f"dry run: would exit {qty} of "
+                                     f"{position.remaining}; quote {quote.timestamp}")
+                result.skipped += 1
+                continue
             fill = broker.submit(position.ticker, qty, "sell", quote=quote)
             log.close_trade(
                 entry_timestamp=position.entry_timestamp, ticker=position.ticker,
@@ -241,6 +268,14 @@ def run_session(*, broker: BrokerLike, log: StudyLog,
                 continue
 
             size = rules.position_size(nlv, quote.ask, thesis.stop)
+            if dry_run:
+                log.log_signal(ticker=candidate.symbol, signal_type="entry_candidate",
+                               triggered_rule="section5_gate", action_taken="SKIPPED",
+                               price_at_signal=quote.ask,
+                               notes=f"dry run: would enter {size} shares; "
+                                     f"stop {thesis.stop:.2f}; quote {quote.timestamp}")
+                result.skipped += 1
+                continue
             fill = broker.submit(candidate.symbol, size, "buy", quote=quote)
             thesis_text = thesis.as_text()
 
@@ -272,4 +307,19 @@ def run_session(*, broker: BrokerLike, log: StudyLog,
             result.errors += 1
 
     LOG.info("session complete: %s", result.summary())
+    if final_day and open_positions:
+        # Mark, do not close. Reported separately from closed trades.
+        for position in open_positions:
+            try:
+                quote = broker.quote(position.ticker)
+            except Exception as exc:  # noqa: BLE001
+                log.log_system_error(stage="end_of_window_mark",
+                                     detail=f"{position.ticker}: {type(exc).__name__}: {exc}")
+                continue
+            log.log_signal(ticker=position.ticker, signal_type="end_of_window_mark",
+                           triggered_rule="section5_end_of_window",
+                           action_taken="MARKED", price_at_signal=quote.bid,
+                           notes=f"open at end of window; entry {position.entry_price}; "
+                                 f"remaining {position.remaining}; quote {quote.timestamp}")
+
     return result

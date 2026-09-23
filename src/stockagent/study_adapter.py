@@ -70,8 +70,27 @@ def falsification_for(conditions: list[str] | None, stop: float) -> str:
     return f"daily close below {stop:.2f}"
 
 
+# PROTOCOL Section 3 restricts the universe to "US-listed common equities".
+# fetch_data.py's DEFAULT_SYMBOLS also carries two context series that are NOT
+# eligible instruments and must never reach layer 1:
+#
+#   VIX  -> ^VIX, an index. No volume, not tradeable.
+#   BTC  -> BTC-USD, a crypto pair. Worse, the local file name "BTC" collides
+#           with a real NYSE ticker, so broker.quote("BTC") returns a ~$38 ETF
+#           while the stop was derived from $81,000 crypto bars. That mismatch
+#           produced a live REJECTED row on 2026-09-22:
+#             "stop 81841.20 is not below entry ask 38.32"
+#           A rejection is the lucky outcome; the same collision could size a
+#           position against the wrong instrument entirely.
+#
+# Excluded here rather than in fetch_data.py so the series stay available as
+# market context to layer 2 without being tradeable candidates.
+NON_EQUITY_SYMBOLS: frozenset[str] = frozenset({"VIX", "BTC"})
+
+
 def candidates_for_session(cfg: Any = None, *, top_n: int = 20) -> list[Candidate]:
     """Layer 1: rank the universe and hand back the survivors."""
+    excluded = NON_EQUITY_SYMBOLS
     from .agents.discovery_agent import DiscoveryAgent
     from .config import Config
     from .data_io import load_universe
@@ -83,8 +102,14 @@ def candidates_for_session(cfg: Any = None, *, top_n: int = 20) -> list[Candidat
     scored = {sym: add_all_indicators(df) for sym, df in universe.items()}
     ranked = DiscoveryAgent(scored, min_dollar_volume=cfg.risk.min_dollar_volume,
                             top_n=top_n).rank()
-    LOG.info("layer 1 produced %d candidates", len(ranked))
-    return [Candidate(symbol=c.symbol, score=float(c.score)) for c in ranked[:top_n]]
+    eligible = [c for c in ranked if c.symbol not in excluded]
+    dropped = len(ranked) - len(eligible)
+    if dropped:
+        LOG.info("dropped %d non-equity symbol(s) per Section 3: %s", dropped,
+                 sorted({c.symbol for c in ranked} & excluded))
+    LOG.info("layer 1 produced %d eligible candidates from %d ranked",
+             len(eligible), len(ranked))
+    return [Candidate(symbol=c.symbol, score=float(c.score)) for c in eligible[:top_n]]
 
 
 def make_thesis_source(cfg: Any = None, *, equity: float = 100_000.0,

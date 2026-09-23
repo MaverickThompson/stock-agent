@@ -57,6 +57,9 @@ def main() -> int:
 
     log = StudyLog(STUDY_DIR)
     positions = load_open_positions()
+    dry_run = os.environ.get("STUDY_DRY_RUN", "").strip().lower() in {
+        "1", "true", "yes", "on"
+    }
 
     try:
         broker = AlpacaBroker()
@@ -88,14 +91,16 @@ def main() -> int:
 
     try:
         result = run_session(broker=broker, log=log, candidates=candidates,
-                             thesis_for=thesis_for, open_positions=positions)
+                             thesis_for=thesis_for, open_positions=positions,
+                             dry_run=dry_run)
     except Exception as exc:  # noqa: BLE001
         log.log_system_error(stage="session", detail=f"{type(exc).__name__}: {exc}")
         observability.report(exc, stage="session")
         observability.flush()
         raise
 
-    save_open_positions(positions)
+    if not dry_run:
+        save_open_positions(positions)
     counts = log.row_counts()
     print(f"{result.summary()} | rows: signals={counts['signals']} "
           f"trades={counts['trades']} | dry-run-passing={dry_run_passed(counts)}")

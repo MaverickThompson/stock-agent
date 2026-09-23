@@ -1,0 +1,14 @@
+# Normalize line endings. Without this, a Windows checkout writes CRLF and every
+# tool that reads the repo on Linux (GitHub Actions, the study session job) sees
+# every line of every file as modified. During a 60-day study that commits once
+# per session, that churn would bury the log rows the audit trail depends on.
+* text=auto eol=lf
+
+# Study logs are append-only evidence. Never let a merge driver touch them.
+study/*.csv -merge
+study/*.csv text eol=lf
+
+# Binary.
+*.png binary
+*.jpg binary
+*.pdf binary

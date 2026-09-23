@@ -46,13 +46,34 @@ jobs:
           pip install -r requirements.txt
           pip install -e .
 
+      # ``data/`` is deliberately ignored because price history cannot be
+      # redistributed. A clean Actions checkout must populate it before the
+      # adapter ranks the universe.
+      # --sp500 is REQUIRED, not optional. Without it fetch_data.py falls back to
+      # DEFAULT_SYMBOLS -- SPY, QQQ, VIX, BTC -- and after the $5M dollar-volume
+      # filter drops VIX, layer 1 sees three names. PROTOCOL Section 3 requires a
+      # minimum of 200 distinct symbols per scanning session. Three is a protocol
+      # breach, and a 60-day study over SPY/QQQ/BTC is a guaranteed null result.
       - name: Fetch market data
         run: python scripts/fetch_data.py --sp500 --skip-existing --allow-partial
+
+      # Freeze the universe on day 1 so it is auditable and cannot drift as the
+      # index is rebalanced mid-study. Written once; later sessions leave it alone.
+      - name: Snapshot the universe (once)
+        run: |
+          mkdir -p study
+          if [ ! -f study/universe.txt ]; then
+            ls data/*.csv | xargs -n1 basename | sed 's/\.csv$//' | sort > study/universe.txt
+            echo "universe frozen: $(wc -l < study/universe.txt) symbols"
+          else
+            echo "universe already frozen: $(wc -l < study/universe.txt) symbols"
+          fi
 
       - name: Run session
         env:
           ALPACA_API_KEY: ${{ secrets.ALPACA_API_KEY }}
           ALPACA_SECRET_KEY: ${{ secrets.ALPACA_SECRET_KEY }}
+          ALPHAVANTAGE_API_KEY: ${{ secrets.ALPHAVANTAGE_API_KEY }}
           SENTRY_DSN: ${{ secrets.SENTRY_DSN }}
           STUDY_DRY_RUN: ${{ inputs.dry_run }}
         run: python scripts/run_session.py
@@ -65,7 +86,9 @@ jobs:
         run: |
           git config user.name "study-session"
           git config user.email "study-session@users.noreply.github.com"
-          git add -A study/ || true
+          # Section 10 defines exactly two logs. The earnings calendar is a
+          # cache and is gitignored, so it is never added here.
+          git add study/signals.csv study/trades.csv study/universe.txt || true
           if git diff --staged --quiet; then
             echo "no log rows this session"
           else

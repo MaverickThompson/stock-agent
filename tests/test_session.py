@@ -159,6 +159,25 @@ def test_clean_entry_writes_both_files(tmp_path):
     assert log.read("signals")[0]["action_taken"] == "ENTERED"
 
 
+def test_dry_run_logs_decisions_without_submitting_orders(tmp_path):
+    """The dispatch flag must make dry runs incapable of changing broker state."""
+    log = StudyLog(tmp_path)
+    held = [position()]
+    broker = FakeBroker({"AAPL": FakeQuote(111.0, 111.1),
+                         "MSFT": FakeQuote(100.9, 101.0)})
+
+    result = session.run_session(
+        broker=broker, log=log, candidates=[Candidate("MSFT", 1.0, "tech")],
+        thesis_for=lambda c: thesis_ok(), open_positions=held, now=NOW,
+        dry_run=True)
+
+    assert broker.orders == []
+    assert result.skipped == 2
+    assert held[0].remaining == 200
+    assert log.read("trades") == []
+    assert [row["action_taken"] for row in log.read("signals")] == ["SKIPPED", "SKIPPED"]
+
+
 def test_rejection_is_logged_with_its_reason(tmp_path):
     log = StudyLog(tmp_path)
     broker = FakeBroker({"AAPL": FakeQuote(100.9, 101.0)})
