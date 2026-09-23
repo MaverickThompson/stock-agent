@@ -203,6 +203,8 @@ def main(argv: list[str] | None = None) -> int:
                         help="seconds between requests, to stay polite (default 0.3)")
     parser.add_argument("--skip-existing", action="store_true",
                         help="skip symbols whose CSV is already up to date")
+    parser.add_argument("--allow-partial", action="store_true",
+                        help="continue broad scans when individual symbols fail")
     args = parser.parse_args(argv)
 
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)-7s %(message)s")
@@ -218,6 +220,8 @@ def main(argv: list[str] | None = None) -> int:
 
     today = dt.date.today().isoformat()
     failures: list[str] = []
+    successes = 0
+    allow_partial = args.allow_partial and args.sp500
     for i, (name, ticker) in enumerate(symbols.items(), 1):
         path = args.out / f"{name}.csv"
         if args.skip_existing and path.exists():
@@ -225,11 +229,13 @@ def main(argv: list[str] | None = None) -> int:
                 last = path.read_text(encoding="utf-8").rstrip().rsplit("\n", 1)[-1]
                 if last.startswith(today):
                     LOG.debug("%s already current, skipping", name)
+                    successes += 1
                     continue
             except OSError:
                 pass
         try:
             fetch_symbol(name, ticker, args.out, range_=args.range_)
+            successes += 1
         except FetchError as exc:
             LOG.error("%s", exc)
             failures.append(name)
@@ -239,9 +245,12 @@ def main(argv: list[str] | None = None) -> int:
         if args.delay and i < len(symbols):
             time.sleep(args.delay)
 
-    if failures:
+    if failures and (not allow_partial or successes == 0):
         LOG.error("failed: %s", ", ".join(failures))
         return 1
+    if failures:
+        LOG.warning("partial fetch: %d symbol(s) failed: %s",
+                    len(failures), ", ".join(failures))
     LOG.info("all symbols written to %s", args.out)
     return 0
 

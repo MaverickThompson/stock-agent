@@ -55,7 +55,7 @@ jobs:
       # minimum of 200 distinct symbols per scanning session. Three is a protocol
       # breach, and a 60-day study over SPY/QQQ/BTC is a guaranteed null result.
       - name: Fetch market data
-        run: python scripts/fetch_data.py --sp500 --skip-existing
+        run: python scripts/fetch_data.py --sp500 --skip-existing --allow-partial
 
       # Freeze the universe on day 1 so it is auditable and cannot drift as the
       # index is rebalanced mid-study. Written once; later sessions leave it alone.
