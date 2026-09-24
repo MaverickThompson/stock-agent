@@ -217,3 +217,18 @@ def test_marker_is_only_written_after_a_session_that_ran() -> None:
     guard = script.index("if result.ran:")
     assert guard < write
     assert "if not dry_run:" in script[:guard]
+
+
+def test_checkout_resolves_the_branch_not_the_triggering_sha() -> None:
+    """A queued firing must not restore a tree from before the marker landed.
+
+    The default checkout pins to github.sha, the tip when the run was created.
+    Under the concurrency group a run can sit queued while the real session
+    runs and pushes; a defaulted checkout would then read a stale marker and
+    trade the same day twice.
+    """
+    workflow = WORKFLOW.read_text(encoding="utf-8")
+    checkout = workflow.index("actions/checkout")
+    guard = workflow.index("id: guard")
+    assert "ref: main" in workflow[checkout:guard], (
+        "checkout does not pin to the branch, so the guard can read a stale marker")

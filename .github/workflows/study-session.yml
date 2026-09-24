@@ -73,7 +73,16 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
+      # ``ref: main`` is load-bearing, not decoration. The default checkout
+      # pins to github.sha -- the tip at the moment the run was CREATED. Runs
+      # created while another session is in flight wait on the concurrency
+      # group, so a defaulted checkout would restore a tree from before the
+      # winning session pushed its marker, the guard below would read a stale
+      # date, and the day would be traded twice. Naming the branch makes
+      # checkout resolve it at job start, after the queue wait.
       - uses: actions/checkout@v5
+        with:
+          ref: main
 
       # Cheap gate, deliberately before the ~500-symbol data fetch. Eighteen of
       # the nineteen daily firings stop here.
@@ -158,5 +167,11 @@ jobs:
             echo "no log rows this session"
           else
             git commit -m "study: session $(date -u +%Y-%m-%d)"
-            git push
+            # Retry once on a race with a manual push. Losing the log is worse
+            # than a failed session, so this does not give up on the first
+            # rejection.
+            git push || {
+              git pull --rebase origin main
+              git push
+            }
           fi
