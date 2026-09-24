@@ -14,6 +14,7 @@ Exit codes:
 
 from __future__ import annotations
 
+import datetime as dt
 import json
 import os
 import pathlib
@@ -28,6 +29,13 @@ from stockagent.study_log import StudyLog, dry_run_passed  # noqa: E402
 
 STUDY_DIR = pathlib.Path(__file__).resolve().parent.parent / "study"
 STATE_PATH = STUDY_DIR / "open_positions.json"
+
+#: The UTC date of the last session that actually ran with the market open.
+#: The workflow fires many times a day because GitHub's scheduler is late by
+#: hours (Section 11 defect correction, 2026-09-24); this marker is how the
+#: later firings know the day is already done. It is operational state, not a
+#: study log -- the two frozen Section 10 schemas are untouched.
+LAST_SESSION_PATH = STUDY_DIR / "last_session.txt"
 
 
 def load_open_positions() -> list[OpenPosition]:
@@ -101,6 +109,11 @@ def main() -> int:
 
     if not dry_run:
         save_open_positions(positions)
+        if result.ran:
+            LAST_SESSION_PATH.parent.mkdir(parents=True, exist_ok=True)
+            LAST_SESSION_PATH.write_text(
+                dt.datetime.now(dt.timezone.utc).date().isoformat() + "\n",
+                encoding="utf-8")
     counts = log.row_counts()
     print(f"{result.summary()} | rows: signals={counts['signals']} "
           f"trades={counts['trades']} | dry-run-passing={dry_run_passed(counts)}")

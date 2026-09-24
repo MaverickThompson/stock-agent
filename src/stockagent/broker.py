@@ -151,8 +151,11 @@ class AlpacaBroker:
         return {p.symbol: int(float(p.qty)) for p in raw}
 
     def market_is_open(self) -> bool:
-        clock = _retry(self._trading.get_clock, "get_clock")
-        return bool(clock.is_open)
+        return bool(self.market_clock().is_open)
+
+    def market_clock(self) -> Any:
+        """Return Alpaca's clock, including the next regular-session open."""
+        return _retry(self._trading.get_clock, "get_clock")
 
     # -- quotes -------------------------------------------------------------
 

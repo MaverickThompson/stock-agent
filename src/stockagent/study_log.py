@@ -189,7 +189,8 @@ class StudyLog:
             "notes": notes,
         })
 
-    def log_system_error(self, *, stage: str, detail: str, ticker: str = "-") -> None:
+    def log_system_error(self, *, stage: str, detail: str, ticker: str = "-",
+                         timestamp: str | None = None) -> None:
         """Record a failed scan, connector outage or missed session.
 
         Mandated by Section 10. Silence here is the failure mode that makes the
@@ -198,7 +199,7 @@ class StudyLog:
         """
         self.log_signal(ticker=ticker, signal_type="system", triggered_rule=stage,
                         action_taken=SYSTEM_ERROR, reason_if_rejected=detail,
-                        notes="logged per Section 10")
+                        notes="logged per Section 10", timestamp=timestamp)
 
     # -- trades -------------------------------------------------------------
 
@@ -259,6 +260,22 @@ class StudyLog:
         path = self.signals_path if which == "signals" else self.trades_path
         with path.open("r", newline="", encoding="utf-8") as handle:
             return list(csv.DictReader(handle))
+
+    def has_system_error(self, *, stage: str, on: dt.date) -> bool:
+        """True when a SYSTEM_ERROR row for ``stage`` already exists on ``on``.
+
+        The workflow fires several times across a trading day (see the Section
+        11 defect correction of 2026-09-24), so the same condition can be
+        observed repeatedly. Section 10 forbids editing or deleting a row, so
+        the only way to keep the log readable is to not write the duplicate.
+        """
+        prefix = on.isoformat()
+        for row in self.read("signals"):
+            if (row.get("action_taken") == SYSTEM_ERROR
+                    and row.get("triggered_rule") == stage
+                    and (row.get("timestamp") or "").startswith(prefix)):
+                return True
+        return False
 
     def row_counts(self) -> dict[str, int]:
         """Row counts excluding headers -- what the dry run is judged on."""
