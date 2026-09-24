@@ -140,6 +140,13 @@ jobs:
             echo "universe already frozen: $(wc -l < study/universe.txt) symbols"
           fi
 
+      - name: Wait for market open
+        if: steps.guard.outputs.skip == 'false'
+        env:
+          ALPACA_API_KEY: ${{ secrets.ALPACA_API_KEY }}
+          ALPACA_SECRET_KEY: ${{ secrets.ALPACA_SECRET_KEY }}
+        run: python scripts/wait_for_market_open.py
+
       - name: Run session
         if: steps.guard.outputs.skip == 'false'
         env:
