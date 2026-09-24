@@ -124,10 +124,15 @@ class SessionResult:
     rejected: int = 0
     errors: int = 0
     skipped: int = 0
+    #: True once the market was confirmed open and the session actually
+    #: evaluated the day. The caller uses this to record that the market day is
+    #: done, so that the other scheduled firings of the same day exit early.
+    ran: bool = False
 
     def summary(self) -> str:
         return (f"entered={self.entered} exited={self.exited} "
-                f"rejected={self.rejected} skipped={self.skipped} errors={self.errors}")
+                f"rejected={self.rejected} skipped={self.skipped} "
+                f"errors={self.errors} ran={self.ran}")
 
 
 def run_session(*, broker: BrokerLike, log: StudyLog,
@@ -163,11 +168,26 @@ def run_session(*, broker: BrokerLike, log: StudyLog,
     final_day = today == rules.STUDY_DAY_60
 
     if not broker.market_is_open():
-        log.log_system_error(stage="market_closed",
-                             detail="session invoked while the market was closed; "
-                                    "no signals evaluated")
+        # Section 11 defect correction, 2026-09-24. GitHub's scheduler runs
+        # cron entries hours late, so the workflow now fires many times across
+        # the day and only the firing that lands inside market hours does work.
+        # Every other firing arrives here, so one row per stage per day is the
+        # Section 10 record; twenty identical rows is noise that Section 10
+        # would then forbid deleting.
+        #
+        # Reading the log afterwards: a day is a genuinely MISSED session only
+        # if it has a market_closed row and no other rows. A market_closed row
+        # sitting alongside signal rows is just an early firing.
+        if not log.has_system_error(stage="market_closed", on=today):
+            log.log_system_error(
+                stage="market_closed",
+                detail="session invoked while the market was closed; "
+                       "no signals evaluated",
+                timestamp=now.strftime("%Y-%m-%dT%H:%M:%SZ"))
         result.errors += 1
         return result
+
+    result.ran = True
 
     # -- 1. exits before entries -------------------------------------------
     for position in list(open_positions):

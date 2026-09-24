@@ -2,22 +2,62 @@ name: Study session
 
 # One session per US market day for the 60-day study.
 #
-# 14:45 UTC is ~15 minutes after the US open during EDT and ~45 minutes after
-# it during EST. The window runs across the November DST change, so a single
-# fixed UTC time necessarily drifts relative to the open; a fixed time that
-# drifts is preferable to changing the schedule mid-study, which Section 11
-# would treat as an amendment.
+# WHY THERE ARE NINETEEN CRON ENTRIES AND NOT ONE
+# -----------------------------------------------
+# GitHub's scheduler does not run a cron entry at the time written. It runs it
+# when the shared runner pool has room, and the observed lateness on this repo
+# has been 3h32m, 5h00m, 6h17m and ~4h. Day 1 of the study (2026-09-23) was
+# scheduled for 14:45 UTC, fired at 21:02 UTC -- after the close -- and the
+# only thing it produced was a market_closed SYSTEM_ERROR row.
 #
-# The job checks the broker clock and logs a SYSTEM_ERROR row if the market is
-# closed, so holidays are recorded rather than silently skipped.
+# A single scheduled time therefore cannot land inside market hours reliably.
+# Nineteen entries spread across the trading day can: whichever firing arrives
+# while the market is open does the session, and every later firing that day
+# sees the marker written below and exits after checkout, in about 20 seconds.
+#
+# The entries run from 13:22 UTC (8 minutes before the EDT open) to 21:14 UTC
+# (14 minutes after the EST close), because the study window crosses the DST
+# change on 2026-11-01: the US open is 13:30 UTC until then and 14:30 UTC
+# after. Minutes are deliberately off the hour and half hour -- GitHub's
+# backlog is worst at :00.
+#
+# This is a Section 11 defect correction: it fixes a scheduler defect that
+# prevented the protocol from executing as written. It does not touch the
+# strategy, the gates, the universe, the position sizing or the log schemas.
+#
+# Reading the log afterwards: a day is a genuinely missed session only if it
+# has a market_closed row AND no other rows. A market_closed row next to signal
+# rows is simply a firing that arrived before the open.
 
 on:
   schedule:
-    - cron: "45 14 * * 1-5"
+    - cron: "22 13 * * 1-5"
+    - cron: "48 13 * * 1-5"
+    - cron: "14 14 * * 1-5"
+    - cron: "41 14 * * 1-5"
+    - cron: "7 15 * * 1-5"
+    - cron: "33 15 * * 1-5"
+    - cron: "59 15 * * 1-5"
+    - cron: "26 16 * * 1-5"
+    - cron: "52 16 * * 1-5"
+    - cron: "18 17 * * 1-5"
+    - cron: "44 17 * * 1-5"
+    - cron: "11 18 * * 1-5"
+    - cron: "37 18 * * 1-5"
+    - cron: "3 19 * * 1-5"
+    - cron: "29 19 * * 1-5"
+    - cron: "56 19 * * 1-5"
+    - cron: "22 20 * * 1-5"
+    - cron: "48 20 * * 1-5"
+    - cron: "14 21 * * 1-5"
   workflow_dispatch:
     inputs:
       dry_run:
         description: "Dry run: evaluate and log, place no orders"
+        type: boolean
+        default: false
+      force:
+        description: "Force: run even if today's session already completed"
         type: boolean
         default: false
 
@@ -35,12 +75,32 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
+      # Cheap gate, deliberately before the ~500-symbol data fetch. Eighteen of
+      # the nineteen daily firings stop here.
+      - name: Has today's session already run?
+        id: guard
+        run: |
+          today=$(date -u +%Y-%m-%d)
+          marker=study/last_session.txt
+          if [ "${{ inputs.force }}" = "true" ]; then
+            echo "forced by workflow_dispatch; running anyway"
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          elif [ -f "$marker" ] && [ "$(tr -d '[:space:]' < "$marker")" = "$today" ]; then
+            echo "session for $today already completed; nothing to do"
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "no completed session recorded for $today; running"
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
+
       - uses: actions/setup-python@v6
+        if: steps.guard.outputs.skip == 'false'
         with:
           python-version: "3.12"
           cache: pip
 
       - name: Install
+        if: steps.guard.outputs.skip == 'false'
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
@@ -55,11 +115,13 @@ jobs:
       # minimum of 200 distinct symbols per scanning session. Three is a protocol
       # breach, and a 60-day study over SPY/QQQ/BTC is a guaranteed null result.
       - name: Fetch market data
+        if: steps.guard.outputs.skip == 'false'
         run: python scripts/fetch_data.py --sp500 --skip-existing --allow-partial
 
       # Freeze the universe on day 1 so it is auditable and cannot drift as the
       # index is rebalanced mid-study. Written once; later sessions leave it alone.
       - name: Snapshot the universe (once)
+        if: steps.guard.outputs.skip == 'false'
         run: |
           mkdir -p study
           if [ ! -f study/universe.txt ]; then
@@ -70,6 +132,7 @@ jobs:
           fi
 
       - name: Run session
+        if: steps.guard.outputs.skip == 'false'
         env:
           ALPACA_API_KEY: ${{ secrets.ALPACA_API_KEY }}
           ALPACA_SECRET_KEY: ${{ secrets.ALPACA_SECRET_KEY }}
@@ -82,13 +145,15 @@ jobs:
       # describing the failure to survive, and a lost log is worse than a
       # failed session.
       - name: Commit the logs
-        if: always()
+        if: always() && steps.guard.outputs.skip == 'false'
         run: |
           git config user.name "study-session"
           git config user.email "study-session@users.noreply.github.com"
           # Section 10 defines exactly two logs. The earnings calendar is a
           # cache and is gitignored, so it is never added here.
-          git add study/signals.csv study/trades.csv study/universe.txt || true
+          # last_session.txt is operational scheduling state, not a study log.
+          git add study/signals.csv study/trades.csv study/universe.txt \
+                  study/last_session.txt || true
           if git diff --staged --quiet; then
             echo "no log rows this session"
           else
