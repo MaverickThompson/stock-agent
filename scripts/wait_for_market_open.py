@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import datetime as dt
+import os
 import pathlib
 import sys
 import time
@@ -25,19 +26,28 @@ def wait_until_open(
     *,
     now_fn: Callable[[], dt.datetime] | None = None,
     sleep_fn: Callable[[float], None] = time.sleep,
-) -> None:
-    """Block until the broker clock enters regular market hours."""
+    max_wait_seconds: float = 15 * 60,
+) -> bool:
+    """Wait for today's open; return false instead of waiting overnight."""
     now_fn = now_fn or (lambda: dt.datetime.now(dt.timezone.utc))
     while True:
         clock = broker.market_clock()
         if clock.is_open:
-            return
+            return True
         seconds = max(
             0.0,
             (_as_utc(clock.next_open) - _as_utc(now_fn())).total_seconds(),
         )
+        if seconds > max_wait_seconds:
+            print("next market open is outside this session's wait window; skipping")
+            return False
         sleep_fn(seconds)
 
 
 if __name__ == "__main__":
-    wait_until_open(AlpacaBroker())
+    ready = wait_until_open(AlpacaBroker())
+    output = pathlib.Path(os.environ["GITHUB_OUTPUT"]) if "GITHUB_OUTPUT" in os.environ else None
+    if output:
+        with output.open("a", encoding="utf-8") as handle:
+            handle.write(f"ready={'true' if ready else 'false'}\n")
+    raise SystemExit(0)

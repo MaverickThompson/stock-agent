@@ -141,6 +141,7 @@ jobs:
           fi
 
       - name: Wait for market open
+        id: market_open
         if: steps.guard.outputs.skip == 'false'
         env:
           ALPACA_API_KEY: ${{ secrets.ALPACA_API_KEY }}
@@ -148,7 +149,7 @@ jobs:
         run: python scripts/wait_for_market_open.py
 
       - name: Run session
-        if: steps.guard.outputs.skip == 'false'
+        if: steps.guard.outputs.skip == 'false' && steps.market_open.outputs.ready == 'true'
         env:
           ALPACA_API_KEY: ${{ secrets.ALPACA_API_KEY }}
           ALPACA_SECRET_KEY: ${{ secrets.ALPACA_SECRET_KEY }}
