@@ -42,10 +42,26 @@ def test_wait_sleeps_until_next_open_then_rechecks():
         Clock(True, opening),
     ])
 
-    waiter.wait_until_open(
+    ready = waiter.wait_until_open(
         broker,
         now_fn=lambda: now,
         sleep_fn=slept.append,
     )
 
+    assert ready is True
     assert slept == [600.0]
+
+
+def test_wait_skips_when_next_open_is_the_following_session():
+    now = dt.datetime(2026, 9, 24, 20, 0, tzinfo=dt.timezone.utc)
+    next_open = dt.datetime(2026, 9, 25, 13, 30, tzinfo=dt.timezone.utc)
+    slept = []
+
+    ready = waiter.wait_until_open(
+        Broker([Clock(False, next_open)]),
+        now_fn=lambda: now,
+        sleep_fn=slept.append,
+    )
+
+    assert ready is False
+    assert slept == []
