@@ -26,7 +26,7 @@ stop           = 773.26 − 2 × 8.94       = $755.38
 risk_per_share = 773.26 − 755.38         = $17.88
 shares         = floor(100.00 / 17.88)   = 5
 actual risk    = 5 × 17.88               = $89.40  (0.89% of equity)
-targets        = 773.26 + 17.88 × (1.5, 3.0) = $800.08, $826.90
+targets        = 773.26 + 17.88 × (2.0, 4.0) = $809.02, $844.78
 reward:risk    = 1.5 to first target
 ```
 

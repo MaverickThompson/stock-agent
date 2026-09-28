@@ -128,7 +128,7 @@ class RiskAgent(Agent):
 
             # --- 5. Reward-to-risk -------------------------------------------
             # Tolerance, because targets are rounded to 4dp when they are
-            # built. Without it a target placed at exactly 1.5R comes back as
+            # built. Without it a target placed at exactly 2.0R comes back as
             # 1.4999... and the agent objects that "1.50 is below 1.50".
             if idea.reward_risk < self.cfg.min_reward_risk - 1e-6:
                 findings.append(self._finding(

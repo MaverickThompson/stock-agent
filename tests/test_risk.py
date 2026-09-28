@@ -30,8 +30,11 @@ def test_worked_example_from_the_docs(portfolio: Portfolio) -> None:
     assert result.shares == 5
     assert result.risk_amount == pytest.approx(89.40, abs=0.05)
     assert result.risk_pct_equity == pytest.approx(0.00894, abs=1e-4)
-    assert result.targets[0] == pytest.approx(800.08, abs=0.02)
-    assert result.targets[1] == pytest.approx(826.90, abs=0.02)
+    # Targets moved 1.5R/3.0R -> 2.0R/4.0R in the 2026-09-28 amendment.
+    # Stop, share count and risk are unchanged, which is the point: the
+    # amendment altered only where the targets sit, nothing about risk.
+    assert result.targets[0] == pytest.approx(809.02, abs=0.02)   # 773.26 + 2.0 x 17.88
+    assert result.targets[1] == pytest.approx(844.78, abs=0.02)   # 773.26 + 4.0 x 17.88
 
 
 def test_risk_never_exceeds_one_percent(portfolio: Portfolio) -> None:
