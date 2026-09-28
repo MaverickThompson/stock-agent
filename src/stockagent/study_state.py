@@ -47,6 +47,8 @@ class StudyState:
             raise ValueError(f"schema_version must be {_SCHEMA_VERSION}")
         if type(self.start_date) is not dt.date:
             raise ValueError("start_date must be a date")
+        if self.start_date != V2_START_DATE:
+            raise ValueError(f"start_date must be {V2_START_DATE.isoformat()}")
         if (type(self.completed_sessions) is not int
                 or not 0 <= self.completed_sessions <= V2_SESSION_TARGET):
             raise ValueError(
@@ -56,6 +58,11 @@ class StudyState:
                 raise ValueError("last_session_date must be a date or null")
             if self.last_session_date < self.start_date:
                 raise ValueError("last_session_date cannot precede start_date")
+            available_dates = (self.last_session_date - self.start_date).days + 1
+            if self.completed_sessions > available_dates:
+                raise ValueError(
+                    "completed_sessions cannot exceed the dates through "
+                    "last_session_date")
         if self.status not in ("active", "complete"):
             raise ValueError("status must be 'active' or 'complete'")
         if (self.completed_sessions == 0) != (self.last_session_date is None):

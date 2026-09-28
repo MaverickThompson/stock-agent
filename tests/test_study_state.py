@@ -88,6 +88,27 @@ def test_sixtieth_successful_session_completes_study():
         }),
         json.dumps({
             "schema_version": 1,
+            "start_date": "2026-09-30",
+            "completed_sessions": 0,
+            "last_session_date": None,
+            "status": "active",
+        }),
+        json.dumps({
+            "schema_version": 1,
+            "start_date": "2026-09-29",
+            "completed_sessions": 2,
+            "last_session_date": "2026-09-29",
+            "status": "active",
+        }),
+        json.dumps({
+            "schema_version": 1,
+            "start_date": "2026-09-29",
+            "completed_sessions": 60,
+            "last_session_date": "2026-09-29",
+            "status": "complete",
+        }),
+        json.dumps({
+            "schema_version": 1,
             "start_date": "2026-09-29",
             "completed_sessions": 0,
             "last_session_date": "2026-09-29",
