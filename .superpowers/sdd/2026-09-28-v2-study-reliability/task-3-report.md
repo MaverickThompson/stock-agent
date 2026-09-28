@@ -366,3 +366,77 @@ Result:
 ```text
 243 passed in 10.45s
 ```
+
+## Follow-up Fix: Action Identity and Partial Target 1 (2026-09-28)
+
+The earlier same-day entry guard prevented an ID collision by skipping every
+additional same-symbol entry that day. It is now scoped to the same logical
+entry action: distinct candidate actions receive distinct IDs, while a replay
+of an already recorded action is skipped. New positions retain their entry
+client ID as their stable position identity; legacy positions fall back to
+their entry timestamp. Exit IDs also include the action portion, so retries
+for one remaining quantity reuse their ID and the next distinct portion gets
+a new one.
+
+Target 1 now tracks cumulative filled shares. A partial fill reduces only the
+actual remaining position, leaves the stop unchanged, and retries only the
+unfilled part of the planned half-exit. The stop moves to entry and
+`target_1_hit` changes only after that planned quantity has filled. Stop,
+falsification, and terminal exit precedence is unchanged.
+
+No V1 signal/trade CSV columns, V2 start date or 60-session accounting,
+frozen universe, workflow state commit boundary, study targets, dependencies,
+or credentials changed. Scheduled attempts and watchdog recovery remain
+dependent on GitHub and provider availability; no guaranteed uptime is claimed.
+
+### RED
+
+Command:
+
+```text
+python -m pytest tests/test_broker.py tests/test_session.py -q
+```
+
+Output:
+
+```text
+3 failed, 30 passed in 1.00s
+```
+
+The three expected failures showed same-day distinct entries still being
+skipped, missing stable position identity, and no cumulative Target 1 fill
+state.
+
+### GREEN
+
+Command:
+
+```text
+python -m pytest tests/test_broker.py tests/test_session.py -q
+```
+
+Output:
+
+```text
+33 passed in 1.03s
+```
+
+The regression coverage includes distinct same-symbol entry and exit IDs,
+stable retries for an unchanged remainder, a partial Target 1 followed by the
+exact outstanding quantity under a new ID, zero-fill non-recording, and the
+existing rejected/zero, pending-order, and accepted-then-timeout lookup
+protections.
+
+### Full-suite verification
+
+Command:
+
+```text
+python -m pytest -q
+```
+
+Output:
+
+```text
+247 passed in 9.34s
+```

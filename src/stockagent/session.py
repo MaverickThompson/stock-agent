@@ -49,6 +49,7 @@ class Candidate:
     symbol: str
     score: float
     sector: str = "unknown"
+    action_id: str = ""
 
 
 @dataclasses.dataclass(frozen=True)
@@ -84,6 +85,19 @@ class OpenPosition:
     thesis: str
     invalidation: str
     target_1_hit: bool = False
+    target_1_filled: int = 0
+    position_id: str = ""
+
+    def __post_init__(self) -> None:
+        planned_target_1 = max(1, self.size // 2)
+        if self.target_1_hit and self.target_1_filled == 0:
+            # Older persisted positions only recorded the boolean. Their stop
+            # was already moved to entry, so preserve that completed state.
+            self.target_1_filled = planned_target_1
+        if not 0 <= self.target_1_filled <= planned_target_1:
+            raise ValueError("target_1_filled must be within the planned Target 1 quantity")
+        if self.target_1_filled == planned_target_1:
+            self.target_1_hit = True
 
     def age_days(self, now: dt.datetime) -> float:
         entered = dt.datetime.strptime(self.entry_timestamp, "%Y-%m-%dT%H:%M:%SZ")
@@ -111,20 +125,59 @@ def make_client_order_id(symbol: str, action: str, now: dt.datetime, *,
     return f"v2-{market_date}-{digest}"
 
 
-def _has_entry_today(log: StudyLog, open_positions: Sequence[OpenPosition],
-                     symbol: str, now: dt.datetime) -> bool:
-    """Prevent a second same-symbol entry from reusing today's broker ID."""
+def _entry_action_already_recorded(
+        log: StudyLog, open_positions: Sequence[OpenPosition], symbol: str,
+        now: dt.datetime, client_order_id: str) -> bool:
+    """Avoid replaying one entry action without blocking distinct same-day entries."""
     utc = (now.replace(tzinfo=dt.timezone.utc) if now.utcoffset() is None
            else now.astimezone(dt.timezone.utc))
     market_date = utc.date().isoformat()
     normalized_symbol = symbol.strip().upper()
-    if any(position.ticker.strip().upper() == normalized_symbol
-           and position.entry_timestamp.startswith(market_date)
-           for position in open_positions):
+    for position in open_positions:
+        if (position.ticker.strip().upper() == normalized_symbol
+                and position.entry_timestamp.startswith(market_date)
+                and (not position.position_id
+                     or position.position_id == client_order_id)):
+            return True
+
+    signals = [
+        row for row in log.read("signals")
+        if row.get("ticker", "").strip().upper() == normalized_symbol
+        and row.get("signal_type") == "entry_candidate"
+        and row.get("action_taken") == "ENTERED"
+    ]
+    if any(f"client_order_id={client_order_id}" in row.get("notes", "")
+           for row in signals):
         return True
-    return any(row.get("ticker", "").strip().upper() == normalized_symbol
-               and row.get("entry_timestamp", "").startswith(market_date)
-               for row in log.read("trades"))
+
+    trades = [
+        row for row in log.read("trades")
+        if row.get("ticker", "").strip().upper() == normalized_symbol
+        and row.get("entry_timestamp", "").startswith(market_date)
+    ]
+    identified_signals = {
+        row["notes"].split("client_order_id=", 1)[1].split()[0]
+        for row in signals
+        if "client_order_id=" in row.get("notes", "")
+        and row.get("timestamp", "").startswith(market_date)
+    }
+    return len(trades) > len(identified_signals)
+
+
+def _candidate_action_identities(candidates: Sequence[Candidate]) -> list[str]:
+    """Give repeated candidate actions stable, distinct identities."""
+    occurrences: dict[str, int] = {}
+    identities = []
+    for candidate in candidates:
+        if candidate.action_id.strip():
+            identities.append(candidate.action_id.strip())
+            continue
+        basis = (f"{candidate.score:.12g}|"
+                 f"{candidate.sector.strip().lower()}")
+        occurrence = occurrences.get(basis, 0)
+        occurrences[basis] = occurrence + 1
+        identities.append(f"{basis}|{occurrence}")
+    return identities
 
 
 def evaluate_exit(position: OpenPosition, bid: float, now: dt.datetime,
@@ -139,8 +192,10 @@ def evaluate_exit(position: OpenPosition, bid: float, now: dt.datetime,
         return ("stop", position.remaining)
     if falsified:
         return ("falsification", position.remaining)
-    if not position.target_1_hit and bid >= position.target_1:
-        return ("target_1", max(1, position.size // 2))
+    planned_target_1 = max(1, position.size // 2)
+    target_1_remaining = planned_target_1 - position.target_1_filled
+    if target_1_remaining > 0 and bid >= position.target_1:
+        return ("target_1", min(target_1_remaining, position.remaining))
     if position.target_1_hit and bid >= position.target_2:
         return ("target_2", position.remaining)
     if position.age_days(now) >= rules.TIME_STOP_DAYS:
@@ -244,7 +299,11 @@ def run_session(*, broker: BrokerLike, log: StudyLog,
                 position.ticker, qty, "sell",
                 client_order_id=make_client_order_id(
                     position.ticker, reason, now,
-                    identity=position.entry_timestamp),
+                    identity=(
+                        f"{position.position_id or position.entry_timestamp}|"
+                        + (f"target_1_filled={position.target_1_filled}"
+                           if reason == "target_1"
+                           else f"remaining={position.remaining}"))),
                 quote=quote)
             filled_qty = int(fill.qty)
             if filled_qty <= 0 or filled_qty > qty:
@@ -266,8 +325,11 @@ def run_session(*, broker: BrokerLike, log: StudyLog,
                                  f"quote {quote.timestamp}")
             position.remaining -= filled_qty
             if reason == "target_1":
-                position.target_1_hit = True
-                position.stop = position.entry_price   # Section 5: stop to entry
+                position.target_1_filled += filled_qty
+                planned_target_1 = max(1, position.size // 2)
+                if position.target_1_filled >= planned_target_1:
+                    position.target_1_hit = True
+                    position.stop = position.entry_price  # Section 5: stop to entry
             if position.remaining <= 0:
                 open_positions.remove(position)
             result.exited += 1
@@ -282,7 +344,8 @@ def run_session(*, broker: BrokerLike, log: StudyLog,
     nlv = float(account.equity)
     open_risk = len(open_positions) * rules.RISK_PER_TRADE
 
-    for candidate in candidates:
+    candidate_action_ids = _candidate_action_identities(candidates)
+    for candidate, action_identity in zip(candidates, candidate_action_ids):
         if len(open_positions) >= rules.MAX_CONCURRENT_POSITIONS:
             log.log_signal(ticker=candidate.symbol, signal_type="entry_candidate",
                            triggered_rule="layer1_rank", action_taken="SKIPPED",
@@ -290,11 +353,14 @@ def run_session(*, broker: BrokerLike, log: StudyLog,
             result.skipped += 1
             continue
         try:
-            if _has_entry_today(log, open_positions, candidate.symbol, now):
+            client_order_id = make_client_order_id(
+                candidate.symbol, "entry", now, identity=action_identity)
+            if _entry_action_already_recorded(
+                    log, open_positions, candidate.symbol, now, client_order_id):
                 log.log_signal(
                     ticker=candidate.symbol, signal_type="entry_candidate",
-                    triggered_rule="same_day_reentry", action_taken="SKIPPED",
-                    notes="same-symbol entry already recorded for this UTC date")
+                    triggered_rule="duplicate_entry_action", action_taken="SKIPPED",
+                    notes="this entry action was already recorded")
                 result.skipped += 1
                 continue
 
@@ -348,7 +414,7 @@ def run_session(*, broker: BrokerLike, log: StudyLog,
                 continue
             fill = broker.submit(
                 candidate.symbol, size, "buy",
-                client_order_id=make_client_order_id(candidate.symbol, "entry", now),
+                client_order_id=client_order_id,
                 quote=quote)
             filled_qty = int(fill.qty)
             if filled_qty <= 0 or filled_qty > size:
@@ -366,7 +432,9 @@ def run_session(*, broker: BrokerLike, log: StudyLog,
                            triggered_rule="section5_gate", action_taken="ENTERED",
                            price_at_signal=fill.filled_price,
                            notes=f"{filled_qty} shares; stop {thesis.stop:.2f}; "
-                                 f"quote {quote.timestamp}; order {fill.order_id}")
+                                 f"quote {quote.timestamp}; order {fill.order_id}; "
+                                 f"client_order_id={client_order_id}",
+                           timestamp=fill.filled_at)
 
             open_positions.append(OpenPosition(
                 ticker=candidate.symbol, direction="long",
@@ -374,7 +442,8 @@ def run_session(*, broker: BrokerLike, log: StudyLog,
                 remaining=filled_qty,
                 stop=thesis.stop, target_1=thesis.target_1, target_2=thesis.target_2,
                 entry_timestamp=fill.filled_at, thesis=thesis_text,
-                invalidation=thesis.falsification))
+                invalidation=thesis.falsification,
+                position_id=client_order_id))
             sector_weights[candidate.sector] = (
                 sector_weights.get(candidate.sector, 0.0)
                 + (filled_qty * fill.filled_price / nlv if nlv else 0.0))
