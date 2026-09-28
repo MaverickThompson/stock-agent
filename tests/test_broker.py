@@ -6,6 +6,8 @@ import pathlib
 import sys
 import types
 
+import pytest
+
 BROKER_PATH = pathlib.Path(__file__).parent.parent / "src" / "stockagent" / "broker.py"
 SPEC = importlib.util.spec_from_file_location("broker_under_test", BROKER_PATH)
 broker = importlib.util.module_from_spec(SPEC)
@@ -46,7 +48,8 @@ def quote():
 
 def settled_order():
     return types.SimpleNamespace(
-        id="alpaca-order-123", status="filled", filled_avg_price="101.25",
+        id="alpaca-order-123", status="filled", filled_qty="1",
+        filled_avg_price="101.25",
         filled_at=dt.datetime(2026, 9, 29, 14, 31, tzinfo=dt.timezone.utc))
 
 
@@ -122,3 +125,87 @@ def test_duplicate_client_order_id_looks_up_and_reconciles_existing_order(monkey
     assert len(duplicate_client.requests) == 1
     assert duplicate_client.order_id_lookups == ["alpaca-order-123"]
     assert recovered_fill == normal_fill
+
+
+@pytest.mark.parametrize("status", ["canceled", "rejected"])
+def test_duplicate_unfilled_order_does_not_create_a_fill(monkeypatch, status):
+    install_sdk_fakes(monkeypatch)
+
+    class DuplicateOrderError(Exception):
+        status_code = 422
+
+    unfilled_order = types.SimpleNamespace(
+        id="alpaca-order-123", status=status, filled_qty="0",
+        filled_avg_price=None, filled_at=None)
+    client = FakeTradingClient(
+        submit=lambda _request: (_ for _ in ()).throw(
+            DuplicateOrderError("client_order_id must be unique")),
+        existing=unfilled_order)
+
+    with pytest.raises(broker.BrokerError, match="zero filled shares"):
+        make_broker(client).submit(
+            "AAPL", 10, "buy", client_order_id="v2-20260929-entry", quote=quote())
+
+    assert client.lookups == ["v2-20260929-entry"]
+
+
+def test_canceled_order_uses_actual_partial_filled_quantity(monkeypatch):
+    install_sdk_fakes(monkeypatch)
+    partial = types.SimpleNamespace(
+        id="alpaca-order-123", status="canceled", filled_qty="3",
+        filled_avg_price="101.25",
+        filled_at=dt.datetime(2026, 9, 29, 14, 31, tzinfo=dt.timezone.utc))
+    client = FakeTradingClient(existing=partial)
+    fill = make_broker(client).submit(
+        "AAPL", 10, "buy", client_order_id="v2-20260929-entry", quote=quote())
+
+    assert fill.qty == 3
+
+
+def test_pending_order_at_timeout_does_not_create_a_fill(monkeypatch):
+    install_sdk_fakes(monkeypatch)
+    clock = [0.0]
+    pending = types.SimpleNamespace(
+        id="alpaca-order-123", status="partially_filled", filled_qty="2",
+        filled_avg_price="101.25", filled_at=None)
+    client = FakeTradingClient(submit=lambda _request: pending, existing=pending)
+    monkeypatch.setattr(broker.time, "monotonic", lambda: clock[0])
+    monkeypatch.setattr(broker.time, "sleep", lambda _seconds: clock.__setitem__(0, 31.0))
+
+    with pytest.raises(broker.BrokerError, match="still pending"):
+        make_broker(client).submit(
+            "AAPL", 10, "buy", client_order_id="v2-20260929-entry", quote=quote())
+
+
+def test_exhausted_ambiguous_submission_looks_up_accepted_order(monkeypatch):
+    install_sdk_fakes(monkeypatch)
+    monkeypatch.setattr(broker.time, "sleep", lambda _seconds: None)
+    client = FakeTradingClient(
+        submit=lambda _request: (_ for _ in ()).throw(TimeoutError("request timed out")))
+
+    fill = make_broker(client).submit(
+        "AAPL", 1, "buy", client_order_id="v2-20260929-entry", quote=quote())
+
+    assert fill.order_id == "alpaca-order-123"
+    assert len(client.requests) == 1 + len(broker.RETRY_DELAYS)
+    assert client.lookups == ["v2-20260929-entry"]
+
+
+def test_absent_ambiguous_submission_reraises_submission_failure(monkeypatch):
+    install_sdk_fakes(monkeypatch)
+    monkeypatch.setattr(broker.time, "sleep", lambda _seconds: None)
+
+    class MissingOrderError(Exception):
+        status_code = 404
+
+    client = FakeTradingClient(
+        submit=lambda _request: (_ for _ in ()).throw(TimeoutError("request timed out")))
+    client.get_order_by_client_id = lambda client_order_id: (
+        client.lookups.append(client_order_id) or
+        (_ for _ in ()).throw(MissingOrderError("not found")))
+
+    with pytest.raises(broker.BrokerError, match="submit_order"):
+        make_broker(client).submit(
+            "AAPL", 1, "buy", client_order_id="v2-20260929-entry", quote=quote())
+
+    assert client.lookups == ["v2-20260929-entry"]

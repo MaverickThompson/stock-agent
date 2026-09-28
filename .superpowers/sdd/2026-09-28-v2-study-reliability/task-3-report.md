@@ -288,3 +288,81 @@ Syntax validation also passed:
 ```text
 python -m py_compile src/stockagent/broker.py src/stockagent/session.py scripts/smoke_broker.py tests/test_broker.py
 ```
+
+## Review Fixes (2026-09-28)
+
+Addressed the three Task 3 review findings:
+
+- Fill reconciliation now accepts only terminal broker statuses and requires a
+  positive broker-reported `filled_qty` no greater than the requested amount.
+  Canceled/rejected orders with no fill and orders still pending at timeout
+  raise `BrokerError`; a canceled partial order records its actual filled
+  quantity. Session trade rows and position sizes/remaining quantities now use
+  the returned quantity, and sector exposure is based on the actual filled
+  quantity and fill price.
+- A position's entry timestamp is included in its exit ID, so same-day exits
+  for the same symbol and reason remain distinct but retries of one position
+  action reuse its ID. A second same-symbol entry on the same UTC date is
+  logged as `SKIPPED`, preventing reuse of the first entry's deterministic ID.
+- After exhausted transient submission failures, the broker looks up the
+  deterministic client ID. It reconciles a found order normally; if lookup
+  fails or confirms no order, it re-raises the original submission failure.
+
+No V1 rows or CSV schemas, study state, daily marker, target configuration,
+universe, dependencies, credentials, workflows, or uptime claims were changed.
+
+### TDD RED
+
+Command:
+
+```text
+python -m pytest tests/test_broker.py tests/test_session.py -q
+```
+
+Result:
+
+```text
+10 failed, 19 passed in 0.98s
+```
+
+The failures reproduced unfilled duplicate orders becoming fills, requested
+quantity being recorded instead of actual partial quantity, pending-order
+timeout fabrication, missing exhausted-timeout lookup, same-day re-entry ID
+reuse, missing per-position exit identity, and incorrect session position and
+trade quantities.
+
+The partially-filled-pending timeout case was then isolated:
+
+```text
+python -m pytest tests/test_broker.py::test_pending_order_at_timeout_does_not_create_a_fill -q
+```
+
+It failed because `partially_filled` was being treated as terminal by a
+substring status check. Replacing this with exact terminal status matching
+ensured a still-pending partial order raises instead of returning a fill.
+
+### TDD GREEN and final validation
+
+Focused command:
+
+```text
+python -m pytest tests/test_broker.py tests/test_session.py -q
+```
+
+Result:
+
+```text
+29 passed in 0.77s
+```
+
+Full-suite command:
+
+```text
+python -m pytest -q
+```
+
+Result:
+
+```text
+243 passed in 10.45s
+```

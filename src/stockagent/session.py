@@ -99,14 +99,32 @@ class BrokerLike(Protocol):
                client_order_id: str, quote: Any = None) -> Any: ...
 
 
-def make_client_order_id(symbol: str, action: str, now: dt.datetime) -> str:
+def make_client_order_id(symbol: str, action: str, now: dt.datetime, *,
+                         identity: str = "") -> str:
     """Build a deterministic Alpaca ID for one V2 action on a UTC market date."""
     utc = (now.replace(tzinfo=dt.timezone.utc) if now.utcoffset() is None
            else now.astimezone(dt.timezone.utc))
     market_date = utc.date().strftime("%Y%m%d")
-    identity = f"v2|{market_date}|{symbol.strip().upper()}|{action.strip().lower()}"
-    digest = hashlib.sha256(identity.encode("utf-8")).hexdigest()[:32]
+    key = (f"v2|{market_date}|{symbol.strip().upper()}|"
+           f"{action.strip().lower()}|{identity}")
+    digest = hashlib.sha256(key.encode("utf-8")).hexdigest()[:32]
     return f"v2-{market_date}-{digest}"
+
+
+def _has_entry_today(log: StudyLog, open_positions: Sequence[OpenPosition],
+                     symbol: str, now: dt.datetime) -> bool:
+    """Prevent a second same-symbol entry from reusing today's broker ID."""
+    utc = (now.replace(tzinfo=dt.timezone.utc) if now.utcoffset() is None
+           else now.astimezone(dt.timezone.utc))
+    market_date = utc.date().isoformat()
+    normalized_symbol = symbol.strip().upper()
+    if any(position.ticker.strip().upper() == normalized_symbol
+           and position.entry_timestamp.startswith(market_date)
+           for position in open_positions):
+        return True
+    return any(row.get("ticker", "").strip().upper() == normalized_symbol
+               and row.get("entry_timestamp", "").startswith(market_date)
+               for row in log.read("trades"))
 
 
 def evaluate_exit(position: OpenPosition, bid: float, now: dt.datetime,
@@ -224,12 +242,19 @@ def run_session(*, broker: BrokerLike, log: StudyLog,
                 continue
             fill = broker.submit(
                 position.ticker, qty, "sell",
-                client_order_id=make_client_order_id(position.ticker, reason, now),
+                client_order_id=make_client_order_id(
+                    position.ticker, reason, now,
+                    identity=position.entry_timestamp),
                 quote=quote)
+            filled_qty = int(fill.qty)
+            if filled_qty <= 0 or filled_qty > qty:
+                raise ValueError(
+                    f"broker returned invalid exit fill quantity {filled_qty} "
+                    f"for a {qty}-share request")
             log.close_trade(
                 entry_timestamp=position.entry_timestamp, ticker=position.ticker,
                 direction=position.direction, entry_price=position.entry_price,
-                size=qty, thesis_at_entry=position.thesis,
+                size=filled_qty, thesis_at_entry=position.thesis,
                 invalidation_condition=position.invalidation,
                 exit_timestamp=fill.filled_at, exit_price=fill.filled_price,
                 exit_reason=reason,
@@ -237,9 +262,9 @@ def run_session(*, broker: BrokerLike, log: StudyLog,
             log.log_signal(ticker=position.ticker, signal_type="exit",
                            triggered_rule=reason, action_taken="EXITED",
                            price_at_signal=fill.filled_price,
-                           notes=f"qty {qty} of {position.remaining}; "
+                           notes=f"qty {filled_qty} of {position.remaining}; "
                                  f"quote {quote.timestamp}")
-            position.remaining -= qty
+            position.remaining -= filled_qty
             if reason == "target_1":
                 position.target_1_hit = True
                 position.stop = position.entry_price   # Section 5: stop to entry
@@ -265,6 +290,14 @@ def run_session(*, broker: BrokerLike, log: StudyLog,
             result.skipped += 1
             continue
         try:
+            if _has_entry_today(log, open_positions, candidate.symbol, now):
+                log.log_signal(
+                    ticker=candidate.symbol, signal_type="entry_candidate",
+                    triggered_rule="same_day_reentry", action_taken="SKIPPED",
+                    notes="same-symbol entry already recorded for this UTC date")
+                result.skipped += 1
+                continue
+
             thesis = thesis_for(candidate)
             if thesis is None:
                 log.log_signal(ticker=candidate.symbol, signal_type="entry_candidate",
@@ -317,26 +350,34 @@ def run_session(*, broker: BrokerLike, log: StudyLog,
                 candidate.symbol, size, "buy",
                 client_order_id=make_client_order_id(candidate.symbol, "entry", now),
                 quote=quote)
+            filled_qty = int(fill.qty)
+            if filled_qty <= 0 or filled_qty > size:
+                raise ValueError(
+                    f"broker returned invalid entry fill quantity {filled_qty} "
+                    f"for a {size}-share request")
             thesis_text = thesis.as_text()
 
             log.open_trade(entry_timestamp=fill.filled_at, ticker=candidate.symbol,
-                           direction="long", entry_price=fill.filled_price, size=size,
+                           direction="long", entry_price=fill.filled_price,
+                           size=filled_qty,
                            thesis_at_entry=thesis_text,
                            invalidation_condition=thesis.falsification)
             log.log_signal(ticker=candidate.symbol, signal_type="entry_candidate",
                            triggered_rule="section5_gate", action_taken="ENTERED",
                            price_at_signal=fill.filled_price,
-                           notes=f"{size} shares; stop {thesis.stop:.2f}; "
+                           notes=f"{filled_qty} shares; stop {thesis.stop:.2f}; "
                                  f"quote {quote.timestamp}; order {fill.order_id}")
 
             open_positions.append(OpenPosition(
                 ticker=candidate.symbol, direction="long",
-                entry_price=fill.filled_price, size=size, remaining=size,
+                entry_price=fill.filled_price, size=filled_qty,
+                remaining=filled_qty,
                 stop=thesis.stop, target_1=thesis.target_1, target_2=thesis.target_2,
                 entry_timestamp=fill.filled_at, thesis=thesis_text,
                 invalidation=thesis.falsification))
             sector_weights[candidate.sector] = (
-                sector_weights.get(candidate.sector, 0.0) + prospective_weight)
+                sector_weights.get(candidate.sector, 0.0)
+                + (filled_qty * fill.filled_price / nlv if nlv else 0.0))
             open_risk += rules.RISK_PER_TRADE
             result.entered += 1
 

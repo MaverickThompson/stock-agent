@@ -214,13 +214,31 @@ class AlpacaBroker:
         try:
             order = _retry(lambda: self._trading.submit_order(request),
                            f"submit_order({side} {qty} {symbol})")
-        except BrokerError as exc:
-            if not self._is_duplicate_client_order_id(exc):
+        except BrokerError as submission_error:
+            cause = submission_error.__cause__
+            duplicate = self._is_duplicate_client_order_id(submission_error)
+            ambiguous = cause is not None and _is_transient(cause)
+            if not duplicate and not ambiguous:
                 raise
-            order = _retry(
-                lambda: self._trading.get_order_by_client_id(client_order_id),
-                f"get_order_by_client_id({client_order_id})")
+            try:
+                order = _retry(
+                    lambda: self._trading.get_order_by_client_id(client_order_id),
+                    f"get_order_by_client_id({client_order_id})")
+            except Exception:
+                raise submission_error
+            if order is None:
+                raise submission_error
         settled = self._await_fill(str(order.id))
+
+        filled_qty = int(float(getattr(settled, "filled_qty", 0) or 0))
+        if filled_qty <= 0:
+            status = getattr(settled, "status", "unknown")
+            raise BrokerError(
+                f"order {order.id} reached {status} with zero filled shares")
+        if filled_qty > qty:
+            raise BrokerError(
+                f"order {order.id} reports {filled_qty} filled shares for a "
+                f"{qty}-share request")
 
         filled_price = float(settled.filled_avg_price or 0.0)
         if filled_price <= 0:
@@ -231,7 +249,8 @@ class AlpacaBroker:
                         "ask" if side.lower() in ("buy", "long") else "bid")
 
         filled_at = getattr(settled, "filled_at", None)
-        return Fill(order_id=str(order.id), symbol=symbol, side=side.lower(), qty=qty,
+        return Fill(order_id=str(order.id), symbol=symbol, side=side.lower(),
+                    qty=filled_qty,
                     filled_price=filled_price,
                     filled_at=(filled_at.strftime("%Y-%m-%dT%H:%M:%SZ")
                                if filled_at else quote.timestamp),
@@ -253,12 +272,14 @@ class AlpacaBroker:
         order = _retry(lambda: self._trading.get_order_by_id(order_id),
                        f"get_order({order_id})")
         while time.monotonic() < deadline:
-            status = str(getattr(order, "status", "")).lower()
-            if "filled" in status or "canceled" in status or "rejected" in status:
+            raw_status = getattr(order, "status", "")
+            status = str(getattr(raw_status, "value", raw_status)).lower()
+            if status in {"filled", "canceled", "cancelled", "rejected",
+                          "expired", "done_for_day", "replaced"}:
                 return order
             time.sleep(1.0)
             order = _retry(lambda: self._trading.get_order_by_id(order_id),
                            f"get_order({order_id})")
-        LOG.warning("order %s still open after %.0fs; recording its current state",
+        LOG.warning("order %s still pending after %.0fs",
                     order_id, timeout)
-        return order
+        raise BrokerError(f"order {order_id} still pending after {timeout:.0f}s")

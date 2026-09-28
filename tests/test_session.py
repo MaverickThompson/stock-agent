@@ -55,8 +55,9 @@ class FakeAccount:
 
 
 class FakeBroker:
-    def __init__(self, quotes, *, is_open=True, fail_on=()):
+    def __init__(self, quotes, *, is_open=True, fail_on=(), fill_qty=None):
         self.quotes, self.is_open, self.fail_on = quotes, is_open, set(fail_on)
+        self.fill_qty = fill_qty
         self.orders = []
         self.client_order_ids = []
 
@@ -79,7 +80,7 @@ class FakeBroker:
             (quote or self.quotes[symbol]).bid
         self.orders.append((symbol, qty, side, price))
         self.client_order_ids.append(client_order_id)
-        return FakeFill(symbol, qty, side, price)
+        return FakeFill(symbol, min(qty, self.fill_qty or qty), side, price)
 
 
 def thesis_ok(**over):
@@ -161,15 +162,17 @@ def test_clean_entry_writes_both_files(tmp_path):
     assert log.read("signals")[0]["action_taken"] == "ENTERED"
 
 
-def test_retried_entry_reuses_its_client_order_id(tmp_path):
+def test_same_day_reentry_is_skipped_instead_of_reusing_entry_id(tmp_path):
     broker = FakeBroker({"AAPL": FakeQuote(100.9, 101.0)})
+    held = []
     for _ in range(2):
-        session.run_session(
+        result = session.run_session(
             broker=broker, log=StudyLog(tmp_path), candidates=[Candidate("AAPL", 1.0)],
-            thesis_for=lambda c: thesis_ok(), open_positions=[], now=NOW)
+            thesis_for=lambda c: thesis_ok(), open_positions=held, now=NOW)
 
-    assert len(broker.client_order_ids) == 2
-    assert broker.client_order_ids[0] == broker.client_order_ids[1]
+    assert len(broker.client_order_ids) == 1
+    assert result.entered == 0 and result.skipped == 1
+    assert held[0].remaining == broker.orders[0][1]
 
 
 def test_entry_and_exit_use_distinct_action_ids(tmp_path):
@@ -180,6 +183,20 @@ def test_entry_and_exit_use_distinct_action_ids(tmp_path):
         thesis_for=lambda c: thesis_ok(), open_positions=held, now=NOW)
 
     broker.quotes["AAPL"] = FakeQuote(111.0, 111.1)
+    session.run_session(
+        broker=broker, log=StudyLog(tmp_path), candidates=[],
+        thesis_for=lambda c: None, open_positions=held, now=NOW)
+
+    assert len(broker.client_order_ids) == 2
+    assert broker.client_order_ids[0] != broker.client_order_ids[1]
+
+
+def test_same_day_same_reason_exits_have_distinct_ids_by_entry_timestamp(tmp_path):
+    broker = FakeBroker({"AAPL": FakeQuote(111.0, 111.1)})
+    held = [
+        position(entry_timestamp="2026-09-01T14:31:00Z"),
+        position(entry_timestamp="2026-09-02T14:31:00Z"),
+    ]
     session.run_session(
         broker=broker, log=StudyLog(tmp_path), candidates=[],
         thesis_for=lambda c: None, open_positions=held, now=NOW)
@@ -199,6 +216,35 @@ def test_client_order_id_uses_utc_market_date_and_fits_alpaca_limit():
         "AAPL", "entry", equivalent_next_day_local)
     assert order_id.startswith("v2-20260929-")
     assert len(order_id) <= 48
+
+
+def test_entry_position_and_trade_use_actual_partial_fill_quantity(tmp_path):
+    log = StudyLog(tmp_path)
+    broker = FakeBroker({"AAPL": FakeQuote(100.9, 101.0)}, fill_qty=80)
+    held = []
+
+    result = session.run_session(
+        broker=broker, log=log, candidates=[Candidate("AAPL", 1.0)],
+        thesis_for=lambda c: thesis_ok(), open_positions=held, now=NOW)
+
+    assert result.entered == 1
+    assert log.read("trades")[0]["size"] == "80"
+    assert held[0].size == held[0].remaining == 80
+
+
+def test_exit_position_and_trade_use_actual_partial_fill_quantity(tmp_path):
+    log = StudyLog(tmp_path)
+    held = [position()]
+    broker = FakeBroker({"AAPL": FakeQuote(111.0, 111.1)}, fill_qty=40)
+
+    result = session.run_session(
+        broker=broker, log=log, candidates=[], thesis_for=lambda c: None,
+        open_positions=held, now=NOW)
+
+    assert result.exited == 1
+    assert held[0].remaining == 160
+    assert log.read("trades")[0]["size"] == "40"
+    assert float(log.read("trades")[0]["pnl"]) == pytest.approx(400.0)
 
 
 def test_dry_run_logs_decisions_without_submitting_orders(tmp_path):
