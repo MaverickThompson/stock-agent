@@ -201,9 +201,10 @@ def test_wait_and_job_timeouts_leave_fetch_and_evaluation_room() -> None:
     wait_minutes = int(wait_match.group(1))
     timeout_minutes = int(timeout_match.group(1))
     assert wait_minutes == 8
-    assert timeout_minutes == 35
-    assert timeout_minutes > wait_minutes + 6 + 20, (
-        "timeout must leave room for the ~6-minute fetch and evaluation")
+    assert timeout_minutes == 45
+    reserved_minutes = timeout_minutes - (wait_minutes + 6 + 20)
+    assert reserved_minutes >= 10, (
+        "timeout must reserve at least 10 minutes beyond wait, fetch, and evaluation")
 
 
 def test_every_working_step_is_gated_by_the_guard() -> None:

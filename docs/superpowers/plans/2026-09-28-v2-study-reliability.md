@@ -147,7 +147,7 @@ git commit -m "fix: make V2 broker retries idempotent"
 **Interfaces:**
 - The eligibility CLI uses `StudyState` start date, completion status/count, and the same-day marker; the workflow consumes its output and removes `force` as a bypass.
 - Market readiness is written to `steps.market_open.outputs.ready`.
-- Set `max_wait_seconds` to 8 minutes and `timeout-minutes` to 35. The market-open wait must run before market-data fetch; fetch, universe snapshot, and session are gated on both `skip == 'false'` and `ready == 'true'`.
+- Set `max_wait_seconds` to 8 minutes and `timeout-minutes` to 45, reserving at least 10 minutes beyond the wait, fetch, and evaluation allowances for setup, snapshotting, and commit overhead. The market-open wait must run before market-data fetch; fetch, universe snapshot, and session are gated on both `skip == 'false'` and `ready == 'true'`.
 
 - [ ] **Step 1: Add failing workflow tests** for the start/count guards, no force bypass, clock check before fetch, readiness gating of fetch/snapshot/session, and wait bound being below the job timeout with enough room for fetch/evaluation.
 - [ ] **Step 2: Run workflow and wait tests to verify failure.**
@@ -155,7 +155,7 @@ git commit -m "fix: make V2 broker retries idempotent"
 Run: `python -m pytest tests/test_market_open_wait.py tests/test_study_workflow.py -q`
 Expected: tests fail for the old force override, wait-after-fetch order, and old timing bounds.
 
-- [ ] **Step 3: Move the Alpaca readiness check before fetch.** Gate all expensive/evaluation steps on readiness, use an 8-minute maximum wait, preserve the repeated UTC schedules, and set a 35-minute job timeout. A next open beyond the bounded wait exits cleanly for the next cron attempt.
+- [ ] **Step 3: Move the Alpaca readiness check before fetch.** Gate all expensive/evaluation steps on readiness, use an 8-minute maximum wait, preserve the repeated UTC schedules, and set a 45-minute job timeout to leave at least 10 minutes for setup and other overhead beyond the 8-minute wait, ~6-minute fetch, and 20-minute evaluation allowance. A next open beyond the bounded wait exits cleanly for the next cron attempt.
 - [ ] **Step 4: Run focused tests and inspect the rendered YAML text.**
 
 Run: `python -m pytest tests/test_market_open_wait.py tests/test_study_workflow.py -q`

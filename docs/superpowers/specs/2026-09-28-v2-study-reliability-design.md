@@ -49,8 +49,10 @@ attempt:
 
 1. Check V2 eligibility and duplicate-day state.
 2. Check Alpaca's clock before the expensive history fetch. Wait only within a
-   bounded interval that fits the 20-minute job timeout; otherwise exit cleanly
-   so a later cron attempt can retry.
+   bounded 8-minute interval within a 45-minute job timeout, leaving at least
+   10 minutes beyond the wait, fetch, and evaluation allowances for setup and
+   other workflow overhead; otherwise exit cleanly so a later cron attempt can
+   retry.
 3. Fetch current data and evaluate once the market is open. Existing per-symbol
    retries and later cron attempts provide bounded retry opportunities.
 4. Commit logs, V2 state, position state, and the daily marker together. A

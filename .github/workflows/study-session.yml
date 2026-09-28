@@ -71,7 +71,7 @@ permissions:
 jobs:
   session:
     runs-on: ubuntu-latest
-    timeout-minutes: 35
+    timeout-minutes: 45
     steps:
       # ``ref: main`` is load-bearing, not decoration. The default checkout
       # pins to github.sha -- the tip at the moment the run was CREATED. Runs
