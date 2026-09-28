@@ -127,13 +127,26 @@ def make_client_order_id(symbol: str, action: str, now: dt.datetime, *,
 
 def _entry_action_already_recorded(
         log: StudyLog, open_positions: Sequence[OpenPosition], symbol: str,
-        client_order_id: str) -> bool:
+        now: dt.datetime, client_order_id: str) -> bool:
     """Avoid replaying one entry action without blocking distinct same-day entries."""
+    utc = (now.replace(tzinfo=dt.timezone.utc) if now.utcoffset() is None
+           else now.astimezone(dt.timezone.utc))
+    market_date = utc.date().isoformat()
     normalized_symbol = symbol.strip().upper()
     for position in open_positions:
         if (position.ticker.strip().upper() == normalized_symbol
-                and position.position_id == client_order_id):
+                and position.entry_timestamp.startswith(market_date)
+                and (not position.position_id
+                     or position.position_id == client_order_id)):
             return True
+
+    tracked_trade_quantities: dict[tuple[str, str], int] = {}
+    for position in open_positions:
+        if (position.ticker.strip().upper() == normalized_symbol
+                and position.entry_timestamp.startswith(market_date)):
+            key = (position.entry_timestamp, normalized_symbol)
+            tracked_trade_quantities[key] = (
+                tracked_trade_quantities.get(key, 0) + position.remaining)
 
     signals = [
         row for row in log.read("signals")
@@ -145,7 +158,23 @@ def _entry_action_already_recorded(
            for row in signals):
         return True
 
-    return False
+    trades: dict[tuple[str, str], dict[str, int]] = {}
+    for row in log.read("trades"):
+        entry_timestamp = row.get("entry_timestamp", "")
+        if (row.get("ticker", "").strip().upper() != normalized_symbol
+                or not entry_timestamp.startswith(market_date)):
+            continue
+        key = (entry_timestamp, normalized_symbol)
+        quantities = trades.setdefault(key, {"entry": 0, "exited": 0})
+        size = int(row["size"])
+        if row.get("exit_timestamp"):
+            quantities["exited"] += size
+        else:
+            quantities["entry"] += size
+
+    return any(qty["entry"] - qty["exited"]
+               > tracked_trade_quantities.get(key, 0)
+               for key, qty in trades.items())
 
 
 def _candidate_action_identities(candidates: Sequence[Candidate]) -> list[str]:
@@ -340,7 +369,7 @@ def run_session(*, broker: BrokerLike, log: StudyLog,
             client_order_id = make_client_order_id(
                 candidate.symbol, "entry", now, identity=action_identity)
             if _entry_action_already_recorded(
-                    log, open_positions, candidate.symbol, client_order_id):
+                    log, open_positions, candidate.symbol, now, client_order_id):
                 log.log_signal(
                     ticker=candidate.symbol, signal_type="entry_candidate",
                     triggered_rule="duplicate_entry_action", action_taken="SKIPPED",

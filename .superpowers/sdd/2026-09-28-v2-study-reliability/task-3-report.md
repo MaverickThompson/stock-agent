@@ -308,6 +308,40 @@ Addressed the three Task 3 review findings:
   deterministic client ID. It reconciles a found order normally; if lookup
   fails or confirms no order, it re-raises the original submission failure.
 
+## Review Fix Round 3 (2026-09-28)
+
+The scoped review found that a process could stop after `trades.csv` received
+an entry row but before the corresponding ID-bearing signal row was appended.
+On retry, neither the position state nor the signal log would identify the
+accepted entry, risking a duplicate trade-log row.
+
+The entry guard now reconciles same-day trade rows by `(entry_timestamp,
+ticker)`, comparing logged entry quantity less logged exit quantity with the
+remaining quantity in tracked positions. Any unexplained open quantity blocks
+a replay, while fully exited same-day rows do not prevent a distinct entry.
+This preserves the frozen CSV schemas and permits multiple tracked same-symbol
+actions in one run.
+
+Regression coverage includes a realistic entry-plus-exit pair followed by a
+distinct action, an unmatched same-day entry row representing the write gap,
+and an already-recorded client ID.
+
+RED command:
+
+```text
+python -m pytest tests/test_session.py::test_unmatched_same_day_entry_trade_blocks_replay_after_crash -q
+```
+
+Output: `1 failed` because the unmarked entry row was replayed.
+
+GREEN command:
+
+```text
+python -m pytest tests/test_broker.py tests/test_session.py -q
+```
+
+Output: `35 passed in 1.00s`. `git diff --check` also passed.
+
 No V1 rows or CSV schemas, study state, daily marker, target configuration,
 universe, dependencies, credentials, workflows, or uptime claims were changed.
 
