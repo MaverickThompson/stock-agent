@@ -26,7 +26,7 @@ def wait_until_open(
     *,
     now_fn: Callable[[], dt.datetime] | None = None,
     sleep_fn: Callable[[float], None] = time.sleep,
-    max_wait_seconds: float = 15 * 60,
+    max_wait_seconds: float = 8 * 60,
 ) -> bool:
     """Wait for today's open; return false instead of waiting overnight."""
     now_fn = now_fn or (lambda: dt.datetime.now(dt.timezone.utc))

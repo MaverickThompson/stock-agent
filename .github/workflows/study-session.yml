@@ -60,10 +60,6 @@ on:
         description: "Dry run: evaluate and log, place no orders"
         type: boolean
         default: false
-      force:
-        description: "Force: run even if today's session already completed"
-        type: boolean
-        default: false
 
 concurrency:
   group: study-session
@@ -75,7 +71,7 @@ permissions:
 jobs:
   session:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 35
     steps:
       # ``ref: main`` is load-bearing, not decoration. The default checkout
       # pins to github.sha -- the tip at the moment the run was CREATED. Runs
@@ -88,29 +84,16 @@ jobs:
         with:
           ref: main
 
-      # Cheap gate, deliberately before the ~500-symbol data fetch. Eighteen of
-      # the nineteen daily firings stop here.
-      - name: Has today's session already run?
-        id: guard
-        run: |
-          today=$(date -u +%Y-%m-%d)
-          marker=study/last_session.txt
-          if [ "${{ inputs.force }}" = "true" ]; then
-            echo "forced by workflow_dispatch; running anyway"
-            echo "skip=false" >> "$GITHUB_OUTPUT"
-          elif [ -f "$marker" ] && [ "$(tr -d '[:space:]' < "$marker")" = "$today" ]; then
-            echo "session for $today already completed; nothing to do"
-            echo "skip=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "no completed session recorded for $today; running"
-            echo "skip=false" >> "$GITHUB_OUTPUT"
-          fi
-
       - uses: actions/setup-python@v6
-        if: steps.guard.outputs.skip == 'false'
         with:
           python-version: "3.12"
           cache: pip
+
+      # Cheap gate, deliberately before the ~500-symbol data fetch. Enforces
+      # the V2 start date, 60-session completion state, and daily marker.
+      - name: Has today's session already run?
+        id: guard
+        run: python scripts/check_study_eligibility.py
 
       - name: Install
         if: steps.guard.outputs.skip == 'false'
@@ -118,6 +101,14 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
           pip install -e .
+
+      - name: Wait for market open
+        id: market_open
+        if: steps.guard.outputs.skip == 'false'
+        env:
+          ALPACA_API_KEY: ${{ secrets.ALPACA_API_KEY }}
+          ALPACA_SECRET_KEY: ${{ secrets.ALPACA_SECRET_KEY }}
+        run: python scripts/wait_for_market_open.py
 
       # ``data/`` is deliberately ignored because price history cannot be
       # redistributed. A clean Actions checkout must populate it before the
@@ -128,13 +119,13 @@ jobs:
       # minimum of 200 distinct symbols per scanning session. Three is a protocol
       # breach, and a 60-day study over SPY/QQQ/BTC is a guaranteed null result.
       - name: Fetch market data
-        if: steps.guard.outputs.skip == 'false'
+        if: steps.guard.outputs.skip == 'false' && steps.market_open.outputs.ready == 'true'
         run: python scripts/fetch_data.py --sp500 --skip-existing --allow-partial
 
       # Freeze the universe on day 1 so it is auditable and cannot drift as the
       # index is rebalanced mid-study. Written once; later sessions leave it alone.
       - name: Snapshot the universe (once)
-        if: steps.guard.outputs.skip == 'false'
+        if: steps.guard.outputs.skip == 'false' && steps.market_open.outputs.ready == 'true'
         run: |
           mkdir -p study
           if [ ! -f study/universe.txt ]; then
@@ -143,14 +134,6 @@ jobs:
           else
             echo "universe already frozen: $(wc -l < study/universe.txt) symbols"
           fi
-
-      - name: Wait for market open
-        id: market_open
-        if: steps.guard.outputs.skip == 'false'
-        env:
-          ALPACA_API_KEY: ${{ secrets.ALPACA_API_KEY }}
-          ALPACA_SECRET_KEY: ${{ secrets.ALPACA_SECRET_KEY }}
-        run: python scripts/wait_for_market_open.py
 
       - name: Run session
         id: run_session

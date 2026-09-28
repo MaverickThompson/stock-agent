@@ -97,11 +97,113 @@ def test_crons_avoid_the_top_of_the_hour() -> None:
 
 
 def test_guard_runs_before_the_expensive_fetch() -> None:
-    """The 18 firings that have nothing to do must not fetch 500 symbols."""
+    """The eligibility and market-clock checks precede the 500-symbol fetch."""
     workflow = WORKFLOW.read_text(encoding="utf-8")
     guard = workflow.index("id: guard")
+    market_open = workflow.index("id: market_open")
     fetch = workflow.index("python scripts/fetch_data.py")
-    assert guard < fetch
+    assert guard < market_open
+    assert market_open < fetch
+
+
+def test_v2_eligibility_guard_uses_the_state_and_daily_marker(tmp_path) -> None:
+    """Pre-start, completed, and duplicate dates must not be forceable."""
+    import json
+    import os
+    import subprocess
+    import sys
+
+    script = pathlib.Path(__file__).parent.parent / "scripts" / "check_study_eligibility.py"
+    assert script.exists(), "the V2 eligibility CLI is missing"
+    state_path = tmp_path / "v2_state.json"
+    marker_path = tmp_path / "last_session.txt"
+    output_path = tmp_path / "github_output.txt"
+
+    active_state = {
+        "schema_version": 1,
+        "start_date": "2026-09-29",
+        "completed_sessions": 0,
+        "last_session_date": None,
+        "status": "active",
+    }
+    state_path.write_text(json.dumps(active_state), encoding="utf-8")
+    marker_path.write_text("", encoding="utf-8")
+
+    def check(today: str) -> str:
+        output_path.write_text("", encoding="utf-8")
+        env = os.environ.copy()
+        env["GITHUB_OUTPUT"] = str(output_path)
+        subprocess.run(
+            [
+                sys.executable, str(script), "--today", today,
+                "--state", str(state_path), "--marker", str(marker_path),
+            ],
+            check=True,
+            capture_output=True,
+            text=True,
+            env=env,
+        )
+        return output_path.read_text(encoding="utf-8")
+
+    assert "skip=true" in check("2026-09-28")
+    assert "skip=false" in check("2026-09-29")
+
+    complete_state = {
+        **active_state,
+        "completed_sessions": 60,
+        "last_session_date": "2026-12-16",
+        "status": "complete",
+    }
+    state_path.write_text(json.dumps(complete_state), encoding="utf-8")
+    assert "skip=true" in check("2026-12-17")
+
+    state_path.write_text(json.dumps(active_state), encoding="utf-8")
+    marker_path.write_text("2026-09-29\n", encoding="utf-8")
+    assert "skip=true" in check("2026-09-29")
+
+
+def test_force_input_is_not_a_study_guard_bypass() -> None:
+    workflow = WORKFLOW.read_text(encoding="utf-8")
+
+    assert "      force:" not in workflow
+    assert "inputs.force" not in workflow
+
+
+def test_market_readiness_gates_fetch_snapshot_and_session() -> None:
+    workflow = WORKFLOW.read_text(encoding="utf-8")
+    steps = workflow[workflow.index("    steps:"):]
+
+    for name, following in (
+        ("- name: Fetch market data", "- name: Snapshot the universe"),
+        ("- name: Snapshot the universe (once)", "- name: Run session"),
+        ("- name: Run session", "- name: Commit the logs"),
+    ):
+        block = steps[steps.index(name):steps.index(following, steps.index(name) + 1)]
+        assert "steps.guard.outputs.skip == 'false'" in block, name
+        assert "steps.market_open.outputs.ready == 'true'" in block, name
+
+    assert "ready=" in (pathlib.Path(__file__).parent.parent
+                        / "scripts" / "wait_for_market_open.py"
+                        ).read_text(encoding="utf-8")
+
+
+def test_wait_and_job_timeouts_leave_fetch_and_evaluation_room() -> None:
+    import re
+
+    workflow = WORKFLOW.read_text(encoding="utf-8")
+    waiter = (pathlib.Path(__file__).parent.parent
+              / "scripts" / "wait_for_market_open.py").read_text(encoding="utf-8")
+    wait_match = re.search(r"max_wait_seconds:\s*float\s*=\s*(\d+)\s*\*\s*60", waiter)
+    timeout_match = re.search(r"timeout-minutes:\s*(\d+)", workflow)
+
+    assert wait_match, "market-open wait bound is not explicit in minutes"
+    assert timeout_match, "job timeout is not explicit"
+    wait_minutes = int(wait_match.group(1))
+    timeout_minutes = int(timeout_match.group(1))
+    assert wait_minutes == 8
+    assert timeout_minutes == 35
+    assert timeout_minutes > wait_minutes + 6 + 20, (
+        "timeout must leave room for the ~6-minute fetch and evaluation")
 
 
 def test_every_working_step_is_gated_by_the_guard() -> None:
@@ -199,7 +301,11 @@ def test_marker_path_matches_between_script_and_workflow() -> None:
     workflow = WORKFLOW.read_text(encoding="utf-8")
 
     assert 'LAST_SESSION_PATH = STUDY_DIR / "last_session.txt"' in script
-    assert "marker=study/last_session.txt" in workflow
+    eligibility = (pathlib.Path(__file__).parent.parent
+                   / "scripts" / "check_study_eligibility.py"
+                   ).read_text(encoding="utf-8")
+    assert 'DEFAULT_MARKER_PATH = ROOT / "study" / "last_session.txt"' in eligibility
+    assert "python scripts/check_study_eligibility.py" in workflow
     assert "study/last_session.txt" in workflow[workflow.index("Commit the logs"):], (
         "the marker is written but never committed, so it resets every run")
 
