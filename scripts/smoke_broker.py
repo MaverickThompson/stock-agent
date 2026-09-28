@@ -26,6 +26,7 @@ from __future__ import annotations
 import argparse
 import pathlib
 import sys
+import uuid
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent / "src"))
 
@@ -76,7 +77,8 @@ def main() -> int:
 
     print(f"6. BUY 1 {SYMBOL} (paper) ...")
     try:
-        bought = broker.submit(SYMBOL, 1, "buy")
+        bought = broker.submit(
+            SYMBOL, 1, "buy", client_order_id=f"smoke-{uuid.uuid4().hex}")
     except BrokerError as exc:
         print(f"   BUY FAILED: {type(exc).__name__}: {exc}")
         return 1
@@ -87,7 +89,8 @@ def main() -> int:
     # the other half of the order path, which an entry-only test would miss.
     print(f"7. SELL 1 {SYMBOL} (paper) ...")
     try:
-        sold = broker.submit(SYMBOL, 1, "sell")
+        sold = broker.submit(
+            SYMBOL, 1, "sell", client_order_id=f"smoke-{uuid.uuid4().hex}")
     except BrokerError as exc:
         print(f"   SELL FAILED: {type(exc).__name__}: {exc}")
         print("   !! 1 share is still open. Close it in the Alpaca UI before day 1.")

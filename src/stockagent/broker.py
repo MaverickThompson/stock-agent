@@ -189,7 +189,7 @@ class AlpacaBroker:
     # -- orders -------------------------------------------------------------
 
     def submit(self, symbol: str, qty: int, side: str, *,
-               quote: Quote | None = None) -> Fill:
+               client_order_id: str, quote: Quote | None = None) -> Fill:
         """Submit a day market order and return the broker's own fill record.
 
         Market orders only: Section 7 models entry at the ask and exit at the
@@ -201,14 +201,25 @@ class AlpacaBroker:
 
         if qty <= 0:
             raise BrokerError(f"refusing to submit a non-positive quantity: {qty}")
+        if not isinstance(client_order_id, str) or not client_order_id:
+            raise BrokerError("client_order_id must be a non-empty string")
+        if len(client_order_id) > 48:
+            raise BrokerError("client_order_id must not exceed Alpaca's 48-character limit")
         quote = quote or self.quote(symbol)
 
         request = MarketOrderRequest(
             symbol=symbol, qty=qty,
             side=OrderSide.BUY if side.lower() in ("buy", "long") else OrderSide.SELL,
-            time_in_force=TimeInForce.DAY)
-        order = _retry(lambda: self._trading.submit_order(request),
-                       f"submit_order({side} {qty} {symbol})")
+            time_in_force=TimeInForce.DAY, client_order_id=client_order_id)
+        try:
+            order = _retry(lambda: self._trading.submit_order(request),
+                           f"submit_order({side} {qty} {symbol})")
+        except BrokerError as exc:
+            if not self._is_duplicate_client_order_id(exc):
+                raise
+            order = _retry(
+                lambda: self._trading.get_order_by_client_id(client_order_id),
+                f"get_order_by_client_id({client_order_id})")
         settled = self._await_fill(str(order.id))
 
         filled_price = float(settled.filled_avg_price or 0.0)
@@ -225,6 +236,16 @@ class AlpacaBroker:
                     filled_at=(filled_at.strftime("%Y-%m-%dT%H:%M:%SZ")
                                if filled_at else quote.timestamp),
                     quote_at_decision=quote)
+
+    @staticmethod
+    def _is_duplicate_client_order_id(error: Exception) -> bool:
+        message = str(error).lower().replace("-", "_")
+        return any(phrase in message for phrase in (
+            "client_order_id must be unique",
+            "client_order_id already exists",
+            "duplicate client_order_id",
+            "duplicate client order id",
+        ))
 
     def _await_fill(self, order_id: str, *, timeout: float = 30.0) -> Any:
         """Poll until the order is terminal. Paper market orders settle quickly."""

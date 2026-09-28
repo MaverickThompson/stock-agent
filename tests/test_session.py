@@ -58,6 +58,7 @@ class FakeBroker:
     def __init__(self, quotes, *, is_open=True, fail_on=()):
         self.quotes, self.is_open, self.fail_on = quotes, is_open, set(fail_on)
         self.orders = []
+        self.client_order_ids = []
 
     def account(self):
         return FakeAccount()
@@ -73,10 +74,11 @@ class FakeBroker:
             raise RuntimeError(f"connector outage for {symbol}")
         return self.quotes[symbol]
 
-    def submit(self, symbol, qty, side, *, quote=None):
+    def submit(self, symbol, qty, side, *, client_order_id, quote=None):
         price = (quote or self.quotes[symbol]).ask if side == "buy" else \
             (quote or self.quotes[symbol]).bid
         self.orders.append((symbol, qty, side, price))
+        self.client_order_ids.append(client_order_id)
         return FakeFill(symbol, qty, side, price)
 
 
@@ -157,6 +159,46 @@ def test_clean_entry_writes_both_files(tmp_path):
     # 1% of 100k / (101.00 - 96.40) = 217
     assert trade["size"] == "217"
     assert log.read("signals")[0]["action_taken"] == "ENTERED"
+
+
+def test_retried_entry_reuses_its_client_order_id(tmp_path):
+    broker = FakeBroker({"AAPL": FakeQuote(100.9, 101.0)})
+    for _ in range(2):
+        session.run_session(
+            broker=broker, log=StudyLog(tmp_path), candidates=[Candidate("AAPL", 1.0)],
+            thesis_for=lambda c: thesis_ok(), open_positions=[], now=NOW)
+
+    assert len(broker.client_order_ids) == 2
+    assert broker.client_order_ids[0] == broker.client_order_ids[1]
+
+
+def test_entry_and_exit_use_distinct_action_ids(tmp_path):
+    broker = FakeBroker({"AAPL": FakeQuote(100.9, 101.0)})
+    held = []
+    session.run_session(
+        broker=broker, log=StudyLog(tmp_path), candidates=[Candidate("AAPL", 1.0)],
+        thesis_for=lambda c: thesis_ok(), open_positions=held, now=NOW)
+
+    broker.quotes["AAPL"] = FakeQuote(111.0, 111.1)
+    session.run_session(
+        broker=broker, log=StudyLog(tmp_path), candidates=[],
+        thesis_for=lambda c: None, open_positions=held, now=NOW)
+
+    assert len(broker.client_order_ids) == 2
+    assert broker.client_order_ids[0] != broker.client_order_ids[1]
+
+
+def test_client_order_id_uses_utc_market_date_and_fits_alpaca_limit():
+    utc = dt.datetime(2026, 9, 29, 14, 31, tzinfo=dt.timezone.utc)
+    equivalent_next_day_local = dt.datetime(
+        2026, 9, 30, 0, 31, tzinfo=dt.timezone(dt.timedelta(hours=10)))
+
+    order_id = session.make_client_order_id("AAPL", "entry", utc)
+
+    assert order_id == session.make_client_order_id(
+        "AAPL", "entry", equivalent_next_day_local)
+    assert order_id.startswith("v2-20260929-")
+    assert len(order_id) <= 48
 
 
 def test_dry_run_logs_decisions_without_submitting_orders(tmp_path):

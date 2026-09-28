@@ -25,6 +25,7 @@ from __future__ import annotations
 
 import dataclasses
 import datetime as dt
+import hashlib
 from typing import Any, Callable, Protocol, Sequence
 
 from . import study_rules as rules
@@ -94,7 +95,18 @@ class BrokerLike(Protocol):
     def positions(self) -> dict[str, int]: ...
     def market_is_open(self) -> bool: ...
     def quote(self, symbol: str) -> Any: ...
-    def submit(self, symbol: str, qty: int, side: str, *, quote: Any = None) -> Any: ...
+    def submit(self, symbol: str, qty: int, side: str, *,
+               client_order_id: str, quote: Any = None) -> Any: ...
+
+
+def make_client_order_id(symbol: str, action: str, now: dt.datetime) -> str:
+    """Build a deterministic Alpaca ID for one V2 action on a UTC market date."""
+    utc = (now.replace(tzinfo=dt.timezone.utc) if now.utcoffset() is None
+           else now.astimezone(dt.timezone.utc))
+    market_date = utc.date().strftime("%Y%m%d")
+    identity = f"v2|{market_date}|{symbol.strip().upper()}|{action.strip().lower()}"
+    digest = hashlib.sha256(identity.encode("utf-8")).hexdigest()[:32]
+    return f"v2-{market_date}-{digest}"
 
 
 def evaluate_exit(position: OpenPosition, bid: float, now: dt.datetime,
@@ -210,7 +222,10 @@ def run_session(*, broker: BrokerLike, log: StudyLog,
                                      f"{position.remaining}; quote {quote.timestamp}")
                 result.skipped += 1
                 continue
-            fill = broker.submit(position.ticker, qty, "sell", quote=quote)
+            fill = broker.submit(
+                position.ticker, qty, "sell",
+                client_order_id=make_client_order_id(position.ticker, reason, now),
+                quote=quote)
             log.close_trade(
                 entry_timestamp=position.entry_timestamp, ticker=position.ticker,
                 direction=position.direction, entry_price=position.entry_price,
@@ -298,7 +313,10 @@ def run_session(*, broker: BrokerLike, log: StudyLog,
                                      f"stop {thesis.stop:.2f}; quote {quote.timestamp}")
                 result.skipped += 1
                 continue
-            fill = broker.submit(candidate.symbol, size, "buy", quote=quote)
+            fill = broker.submit(
+                candidate.symbol, size, "buy",
+                client_order_id=make_client_order_id(candidate.symbol, "entry", now),
+                quote=quote)
             thesis_text = thesis.as_text()
 
             log.open_trade(entry_timestamp=fill.filled_at, ticker=candidate.symbol,
