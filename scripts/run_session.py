@@ -9,7 +9,7 @@ unattended for sixty days is the thing the tests actually cover.
 
 Exit codes:
   0  the session ran (including a session that legitimately did nothing)
-  1  the session could not run at all, and said so in signals.csv
+  1  the session failed or was incomplete; progress was not advanced
 """
 
 from __future__ import annotations
@@ -99,15 +99,18 @@ def main() -> int:
     def thesis_for(_candidate):
         return None
 
+    adapter_failed = False
     try:
         from stockagent.study_adapter import candidates_for_session, thesis_for as _t
         candidates = candidates_for_session()
         thesis_for = _t
-    except ImportError:
+    except Exception as exc:  # noqa: BLE001 - preserve position management
+        adapter_failed = True
         log.log_system_error(
             stage="analysis_adapter",
-            detail="study_adapter not present; open positions were managed but "
-                   "no new entries were evaluated this session")
+            detail=f"{type(exc).__name__}: {exc}; open positions were managed "
+                   "but no new entries were evaluated this session")
+        observability.report(exc, stage="analysis_adapter")
 
     try:
         result = run_session(broker=broker, log=log, candidates=candidates,
@@ -122,15 +125,22 @@ def main() -> int:
 
     if result.ran and not dry_run:
         save_open_positions(positions)
-        study_state = study_state.record_success(today)
-        study_state.save(V2_STATE_PATH)
-        LAST_SESSION_PATH.parent.mkdir(parents=True, exist_ok=True)
-        LAST_SESSION_PATH.write_text(today.isoformat() + "\n", encoding="utf-8")
+        if result.errors == 0 and not adapter_failed:
+            study_state = study_state.record_success(today)
+            study_state.save(V2_STATE_PATH)
+            LAST_SESSION_PATH.parent.mkdir(parents=True, exist_ok=True)
+            LAST_SESSION_PATH.write_text(today.isoformat() + "\n", encoding="utf-8")
     counts = log.row_counts()
     print(f"{result.summary()} | rows: signals={counts['signals']} "
           f"trades={counts['trades']} | dry-run-passing={dry_run_passed(counts)}")
+    incomplete = result.ran and (result.errors > 0 or adapter_failed)
+    if incomplete:
+        reason = ("analysis_adapter failure" if adapter_failed
+                  else f"{result.errors} session error(s)")
+        print(f"session incomplete: {reason}; progress was not advanced",
+              file=sys.stderr)
     observability.flush()
-    return 0
+    return 1 if incomplete else 0
 
 
 if __name__ == "__main__":

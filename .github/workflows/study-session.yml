@@ -146,9 +146,9 @@ jobs:
           STUDY_DRY_RUN: ${{ inputs.dry_run }}
         run: python scripts/run_session.py
 
-      # Committed even on failure: Section 10 requires the SYSTEM_ERROR row
-      # describing the failure to survive, and a lost log is worse than a
-      # failed session.
+      # Logs and open positions are one execution record and must be committed
+      # together even on failure. Incomplete attempts do not advance V2 state
+      # or the daily marker.
       - name: Commit the logs
         if: always() && steps.guard.outputs.skip == 'false'
         run: |
@@ -157,12 +157,12 @@ jobs:
           # Section 10 defines exactly two logs. The earnings calendar is a
           # cache and is gitignored, so it is never added here.
           # last_session.txt is operational scheduling state, not a study log.
-          git add study/signals.csv study/trades.csv study/universe.txt || true
+          git add study/signals.csv study/trades.csv study/universe.txt \
+                  study/open_positions.json || true
           if [ "${{ steps.run_session.conclusion }}" = "success" ]; then
-            git add study/open_positions.json study/v2_state.json \
-                    study/last_session.txt || true
+            git add study/v2_state.json study/last_session.txt || true
           else
-            echo "Run session did not succeed; leaving progress artifacts unstaged"
+            echo "Run session did not succeed; leaving V2 progress and marker unstaged"
           fi
           if git diff --staged --quiet; then
             echo "no log rows this session"

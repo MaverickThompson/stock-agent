@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import datetime as dt
 import pathlib
+from zoneinfo import ZoneInfo
 
 from stockagent.study_state import StudyState, V2_SESSION_TARGET, V2_START_DATE
 from scripts.check_study_health import check_study_health
@@ -71,6 +72,47 @@ def test_active_v2_missed_market_day_writes_recovery_instructions(tmp_path):
     assert "study/last_session.txt" in report
     assert "workflow_dispatch" in report
     assert "next open market session" in report.lower()
+
+
+def test_active_session_is_pending_until_actual_calendar_close(tmp_path):
+    market_date = dt.date(2026, 9, 30)
+    summary = tmp_path / "summary.md"
+    ny = ZoneInfo("America/New_York")
+
+    healthy = check_study_health(
+        _state(), market_date, calendar_sessions=[market_date],
+        summary_path=summary, session_close=dt.time(16, 0),
+        now=dt.datetime(2026, 9, 30, 15, 59, tzinfo=ny))
+
+    assert healthy is True
+    assert "pending" in summary.read_text(encoding="utf-8").lower()
+
+
+def test_active_session_is_missed_after_calendar_close(tmp_path):
+    market_date = dt.date(2026, 9, 30)
+    summary = tmp_path / "summary.md"
+    ny = ZoneInfo("America/New_York")
+
+    healthy = check_study_health(
+        _state(), market_date, calendar_sessions=[market_date],
+        summary_path=summary, session_close=dt.time(16, 0),
+        now=dt.datetime(2026, 9, 30, 16, 1, tzinfo=ny))
+
+    assert healthy is False
+    assert "MISSED MARKET SESSION" in summary.read_text(encoding="utf-8")
+
+
+def test_early_close_uses_alpaca_close_time(tmp_path):
+    market_date = dt.date(2026, 11, 27)
+    summary = tmp_path / "summary.md"
+    ny = ZoneInfo("America/New_York")
+
+    healthy = check_study_health(
+        _state(), market_date, calendar_sessions=[market_date],
+        summary_path=summary, session_close=dt.time(13, 0),
+        now=dt.datetime(2026, 11, 27, 13, 1, tzinfo=ny))
+
+    assert healthy is False
 
 
 def test_v2_not_started_does_not_report_a_missed_session(tmp_path):
@@ -142,3 +184,21 @@ def test_broker_calendar_sessions_uses_typed_inclusive_alpaca_request():
     assert broker.calendar_sessions(start, end) == [calendar_date]
     assert client.request.start == start
     assert client.request.end == end
+
+
+def test_broker_calendar_returns_actual_early_close_time():
+    from stockagent.broker import AlpacaBroker
+
+    market_date = dt.date(2026, 11, 27)
+
+    class CalendarClient:
+        def get_calendar(self, request):
+            return [type("CalendarEntry", (), {
+                "date": market_date, "close": "13:00",
+            })()]
+
+    broker = object.__new__(AlpacaBroker)
+    broker._trading = CalendarClient()
+
+    assert broker.calendar_sessions_with_closes(
+        market_date, market_date) == [(market_date, dt.time(13, 0))]

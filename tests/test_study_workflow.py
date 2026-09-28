@@ -336,7 +336,7 @@ def test_commit_step_keeps_all_session_state_and_logs_together() -> None:
 
 
 def test_commit_step_stages_progress_only_after_run_session_succeeds() -> None:
-    """Failed runner writes stay local while failure logs can still be committed."""
+    """Partial position changes and their logs commit without advancing progress."""
     workflow = WORKFLOW.read_text(encoding="utf-8")
     run_step = workflow[workflow.index("- name: Run session"):
                         workflow.index("- name: Commit the logs")]
@@ -353,14 +353,11 @@ def test_commit_step_stages_progress_only_after_run_session_succeeds() -> None:
         line for line in commit.splitlines()
         if not line.lstrip().startswith("#"))
     unguarded_commit = active_commit.replace(gated_staging, "")
-    for path in (
-        "study/open_positions.json",
-        "study/v2_state.json",
-        "study/last_session.txt",
-    ):
+    for path in ("study/v2_state.json", "study/last_session.txt"):
         assert path in gated_staging, f"{path} is not gated on runner success"
         assert path not in unguarded_commit, f"{path} can be staged without success"
 
+    assert "study/open_positions.json" in unguarded_commit
     assert "git add study/signals.csv study/trades.csv study/universe.txt" in commit
 
 
@@ -380,7 +377,7 @@ def test_checkout_resolves_the_branch_not_the_triggering_sha() -> None:
 
 
 def _run_session_script(monkeypatch, tmp_path, state, *, is_open=True,
-                       dry_run=False, run_session=None):
+                       dry_run=False, run_session=None, adapter_missing=False):
     import datetime as dt
     import importlib.util
     import sys
@@ -417,10 +414,11 @@ def _run_session_script(monkeypatch, tmp_path, state, *, is_open=True,
         runner, "AlpacaBroker",
         lambda: FakeBroker({}, is_open=is_open))
 
-    adapter = types.ModuleType("stockagent.study_adapter")
-    adapter.candidates_for_session = lambda: []
-    adapter.thesis_for = lambda candidate: None
-    monkeypatch.setitem(sys.modules, "stockagent.study_adapter", adapter)
+    if not adapter_missing:
+        adapter = types.ModuleType("stockagent.study_adapter")
+        adapter.candidates_for_session = lambda: []
+        adapter.thesis_for = lambda candidate: None
+        monkeypatch.setitem(sys.modules, "stockagent.study_adapter", adapter)
     if run_session is not None:
         monkeypatch.setattr(runner, "run_session", run_session)
 
@@ -483,3 +481,57 @@ def test_runner_does_not_persist_v2_progress_for_a_dry_run(monkeypatch, tmp_path
     assert status == 0
     assert unchanged == initial
     assert not runner.LAST_SESSION_PATH.exists()
+
+
+def test_runner_persists_partial_positions_but_fails_without_progress(
+        monkeypatch, tmp_path, capsys):
+    import json
+    from stockagent.session import OpenPosition, SessionResult
+    from stockagent.study_state import StudyState, V2_START_DATE
+
+    initial = StudyState(1, V2_START_DATE, 0, None, "active")
+    changed_position = OpenPosition(
+        ticker="AAPL", direction="long", entry_price=101.0, size=20,
+        remaining=10, stop=96.4, target_1=110.2, target_2=120.0,
+        entry_timestamp="2026-09-29T14:00:00Z", thesis="test",
+        invalidation="below stop")
+
+    def partial_run(**kwargs):
+        kwargs["open_positions"].append(changed_position)
+        return SessionResult(entered=1, errors=1, ran=True)
+
+    status, runner, unchanged = _run_session_script(
+        monkeypatch, tmp_path, initial, run_session=partial_run)
+
+    assert status == 1
+    assert unchanged == initial
+    assert not runner.LAST_SESSION_PATH.exists()
+    assert json.loads(runner.STATE_PATH.read_text(encoding="utf-8")) == [
+        changed_position.__dict__]
+    assert "incomplete" in capsys.readouterr().err.lower()
+
+
+def test_missing_adapter_fails_without_counting_empty_evaluation(
+        monkeypatch, tmp_path, capsys):
+    from stockagent.study_state import StudyState, V2_START_DATE
+
+    initial = StudyState(1, V2_START_DATE, 0, None, "active")
+    original_import = __import__
+    monkeypatch.setattr(
+        "builtins.__import__",
+        lambda name, *args, **kwargs: (
+            (_ for _ in ()).throw(ImportError("adapter absent"))
+            if name == "stockagent.study_adapter"
+            else original_import(name, *args, **kwargs)))
+
+    status, runner, unchanged = _run_session_script(
+        monkeypatch, tmp_path, initial, adapter_missing=True)
+
+    assert status == 1
+    assert unchanged == initial
+    assert not runner.LAST_SESSION_PATH.exists()
+    assert "analysis_adapter" in capsys.readouterr().err.lower()
+    from stockagent.study_log import StudyLog
+    assert any(
+        row["triggered_rule"] == "analysis_adapter"
+        for row in StudyLog(runner.STUDY_DIR).read("signals"))

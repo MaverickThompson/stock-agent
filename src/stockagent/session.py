@@ -177,19 +177,32 @@ def _entry_action_already_recorded(
 
 
 def _candidate_action_identities(candidates: Sequence[Candidate]) -> list[str]:
-    """Give repeated candidate actions stable, distinct identities."""
+    """Identify ranked actions without using mutable ranking attributes."""
     occurrences: dict[str, int] = {}
     identities = []
     for candidate in candidates:
-        if candidate.action_id.strip():
-            identities.append(candidate.action_id.strip())
-            continue
-        basis = (f"{candidate.score:.12g}|"
-                 f"{candidate.sector.strip().lower()}")
-        occurrence = occurrences.get(basis, 0)
-        occurrences[basis] = occurrence + 1
-        identities.append(f"{basis}|{occurrence}")
+        symbol = candidate.symbol.strip().upper()
+        occurrence = occurrences.get(symbol, 0)
+        occurrences[symbol] = occurrence + 1
+        basis = candidate.action_id.strip() or f"symbol:{symbol}"
+        identities.append(f"{basis}|candidate={occurrence}")
     return identities
+
+
+def _closed_entry_cycles(log: StudyLog, symbol: str, market_date: str) -> int:
+    """Count fully closed same-day entries so a later cycle gets a fresh ID."""
+    quantities: dict[str, list[int]] = {}
+    normalized_symbol = symbol.strip().upper()
+    for row in log.read("trades"):
+        entry_timestamp = row.get("entry_timestamp", "")
+        if (row.get("ticker", "").strip().upper() != normalized_symbol
+                or not entry_timestamp.startswith(market_date)):
+            continue
+        totals = quantities.setdefault(entry_timestamp, [0, 0])
+        size = int(row["size"])
+        totals[1 if row.get("exit_timestamp") else 0] += size
+    return sum(exited >= entered and entered > 0
+               for entered, exited in quantities.values())
 
 
 def evaluate_exit(position: OpenPosition, bid: float, now: dt.datetime,
@@ -352,12 +365,27 @@ def run_session(*, broker: BrokerLike, log: StudyLog,
             result.errors += 1
 
     # -- 2. new entries -----------------------------------------------------
-    account = broker.account()
-    nlv = float(account.equity)
+    account_error: str | None = None
+    try:
+        account = broker.account()
+    except Exception as exc:  # noqa: BLE001 - exits above may already have filled
+        account = None
+        account_error = f"{type(exc).__name__}: {exc}"
+        log.log_system_error(stage="account", detail=account_error)
+        result.errors += 1
+    nlv = float(account.equity) if account is not None else 0.0
     open_risk = len(open_positions) * rules.RISK_PER_TRADE
 
     candidate_action_ids = _candidate_action_identities(candidates)
     for candidate, action_identity in zip(candidates, candidate_action_ids):
+        if account is None:
+            log.log_system_error(
+                stage="entry",
+                detail=f"account data unavailable; candidate not evaluated: "
+                       f"{account_error}",
+                ticker=candidate.symbol)
+            result.errors += 1
+            continue
         if len(open_positions) >= rules.MAX_CONCURRENT_POSITIONS:
             log.log_signal(ticker=candidate.symbol, signal_type="entry_candidate",
                            triggered_rule="layer1_rank", action_taken="SKIPPED",
@@ -365,8 +393,14 @@ def run_session(*, broker: BrokerLike, log: StudyLog,
             result.skipped += 1
             continue
         try:
+            utc_now = (now.replace(tzinfo=dt.timezone.utc)
+                       if now.utcoffset() is None
+                       else now.astimezone(dt.timezone.utc))
+            closed_cycles = _closed_entry_cycles(
+                log, candidate.symbol, utc_now.date().isoformat())
             client_order_id = make_client_order_id(
-                candidate.symbol, "entry", now, identity=action_identity)
+                candidate.symbol, "entry", now,
+                identity=f"{action_identity}|cycle={closed_cycles}")
             if _entry_action_already_recorded(
                     log, open_positions, candidate.symbol, now, client_order_id):
                 log.log_signal(

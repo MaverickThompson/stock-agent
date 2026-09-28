@@ -255,6 +255,49 @@ def test_distinct_same_symbol_entries_on_the_same_day_get_distinct_ids(tmp_path)
     assert broker.client_order_ids[0] != broker.client_order_ids[1]
 
 
+def test_entry_retry_keeps_id_when_candidate_ranking_changes(tmp_path):
+    broker = FakeBroker({"AAPL": FakeQuote(100.9, 101.0)}, submit_failures=1)
+    log = StudyLog(tmp_path)
+
+    first = session.run_session(
+        broker=broker, log=log, candidates=[Candidate("AAPL", 1.0, "tech")],
+        thesis_for=lambda c: thesis_ok(), open_positions=[], now=NOW)
+    second = session.run_session(
+        broker=broker, log=log,
+        candidates=[Candidate("AAPL", 0.2, "healthcare")],
+        thesis_for=lambda c: thesis_ok(), open_positions=[], now=NOW)
+
+    assert first.errors == 1 and second.entered == 1
+    assert broker.client_order_ids[0] == broker.client_order_ids[1]
+
+
+def test_same_day_reentry_after_full_close_gets_new_client_id(tmp_path):
+    broker = FakeBroker({"AAPL": FakeQuote(100.9, 101.0)})
+    log = StudyLog(tmp_path)
+    held = []
+
+    first = session.run_session(
+        broker=broker, log=log, candidates=[Candidate("AAPL", 1.0, "tech")],
+        thesis_for=lambda c: thesis_ok(), open_positions=held, now=NOW)
+    prior = held[0]
+    log.close_trade(
+        entry_timestamp=prior.entry_timestamp, ticker=prior.ticker,
+        direction=prior.direction, entry_price=prior.entry_price,
+        size=prior.remaining, thesis_at_entry=prior.thesis,
+        invalidation_condition=prior.invalidation,
+        exit_timestamp="2026-09-22T15:00:00Z", exit_price=102.0,
+        exit_reason="falsification", was_thesis_correct=False)
+    held.clear()
+
+    second = session.run_session(
+        broker=broker, log=log,
+        candidates=[Candidate("AAPL", 1.0, "tech")],
+        thesis_for=lambda c: thesis_ok(), open_positions=held, now=NOW)
+
+    assert first.entered == 1 and second.entered == 1
+    assert broker.client_order_ids[0] != broker.client_order_ids[1]
+
+
 def test_same_position_reason_and_remainder_retry_reuses_id(tmp_path):
     broker = FakeBroker({"AAPL": FakeQuote(111.0, 111.1)}, submit_failures=1)
     held = [position()]
@@ -433,6 +476,27 @@ def test_broker_outage_logs_system_error_and_continues(tmp_path):
     assert rows["AAPL"]["action_taken"] == "SYSTEM_ERROR"
     assert "outage" in rows["AAPL"]["reason_if_rejected"]
     assert rows["MSFT"]["action_taken"] == "ENTERED"
+
+
+def test_account_failure_does_not_lose_position_changes_from_successful_exit(tmp_path):
+    class AccountFailureBroker(FakeBroker):
+        def account(self):
+            raise RuntimeError("account endpoint unavailable")
+
+    log = StudyLog(tmp_path)
+    held = [position()]
+    broker = AccountFailureBroker({"AAPL": FakeQuote(111.0, 111.1)})
+
+    result = session.run_session(
+        broker=broker, log=log, candidates=[Candidate("MSFT", 1.0)],
+        thesis_for=lambda c: thesis_ok(), open_positions=held, now=NOW)
+
+    assert result.ran and result.errors > 0 and result.exited == 1
+    assert held[0].remaining == 100
+    assert any(row["ticker"] == "AAPL" and row["exit_timestamp"]
+               for row in log.read("trades"))
+    assert any(row["ticker"] == "MSFT" and row["action_taken"] == "SYSTEM_ERROR"
+               for row in log.read("signals"))
 
 
 def test_position_cap_skips_the_rest_and_logs_each(tmp_path):

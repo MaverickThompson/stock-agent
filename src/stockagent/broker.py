@@ -161,6 +161,13 @@ class AlpacaBroker:
         self, start_date: dt.date, end_date: dt.date,
     ) -> list[dt.date]:
         """Return Alpaca calendar session dates in the inclusive range."""
+        return [session_date for session_date, _close in
+                self.calendar_sessions_with_closes(start_date, end_date)]
+
+    def calendar_sessions_with_closes(
+        self, start_date: dt.date, end_date: dt.date,
+    ) -> list[tuple[dt.date, dt.time | None]]:
+        """Return Alpaca session dates and their actual local close times."""
         if type(start_date) is not dt.date or type(end_date) is not dt.date:
             raise TypeError("calendar bounds must be dates")
         if end_date < start_date:
@@ -173,7 +180,7 @@ class AlpacaBroker:
                 GetCalendarRequest(start=start_date, end=end_date)),
             "get_calendar",
         )
-        dates: list[dt.date] = []
+        sessions: list[tuple[dt.date, dt.time | None]] = []
         for entry in raw_calendar:
             session_date = entry.date
             if isinstance(session_date, dt.datetime):
@@ -182,8 +189,23 @@ class AlpacaBroker:
                 session_date = dt.date.fromisoformat(session_date)
             if type(session_date) is not dt.date:
                 raise BrokerError("Alpaca returned an invalid calendar session date")
-            dates.append(session_date)
-        return dates
+            raw_close = getattr(entry, "close", None)
+            if isinstance(raw_close, dt.datetime):
+                close = raw_close.timetz()
+            elif isinstance(raw_close, dt.time):
+                close = raw_close
+            elif isinstance(raw_close, str):
+                try:
+                    close = dt.time.fromisoformat(raw_close)
+                except ValueError as error:
+                    raise BrokerError(
+                        "Alpaca returned an invalid calendar session close") from error
+            elif raw_close is None:
+                close = None
+            else:
+                raise BrokerError("Alpaca returned an invalid calendar session close")
+            sessions.append((session_date, close))
+        return sessions
 
     # -- quotes -------------------------------------------------------------
 

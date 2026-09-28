@@ -31,14 +31,26 @@ def check_study_health(
     market_date: dt.date,
     calendar_sessions: Iterable[dt.date],
     summary_path: pathlib.Path | str,
+    *,
+    session_close: dt.time | None = None,
+    now: dt.datetime | None = None,
 ) -> bool:
     """Return false only when an eligible Alpaca session was not completed."""
     if not isinstance(state, StudyState):
         raise TypeError("state must be a StudyState")
     if type(market_date) is not dt.date:
         raise TypeError("market_date must be a date")
+    if session_close is not None and not isinstance(session_close, dt.time):
+        raise TypeError("session_close must be a time")
 
     is_session = market_date in set(calendar_sessions)
+    new_york = ZoneInfo("America/New_York")
+    local_now = (now.astimezone(new_york) if now and now.tzinfo
+                 else now.replace(tzinfo=new_york) if now
+                 else None)
+    is_current_session = bool(
+        is_session and local_now and local_now.date() == market_date)
+
     if not is_session:
         message = (
             f"## Study health: healthy\n\n"
@@ -67,6 +79,21 @@ def check_study_health(
             "evaluations)."
         )
     else:
+        if is_current_session:
+            if session_close is None:
+                raise ValueError(
+                    "Alpaca calendar close time is required for today's session")
+            close_at = dt.datetime.combine(
+                market_date, session_close, tzinfo=new_york)
+            if local_now < close_at:
+                message = (
+                    "## Study health: healthy\n\n"
+                    f"The Alpaca session for {market_date.isoformat()} is still "
+                    f"in progress (scheduled close {session_close.isoformat()} "
+                    "New York time); the V2 evaluation is pending."
+                )
+                _write_summary(summary_path, message)
+                return True
         state_path = DEFAULT_STATE_PATH.relative_to(ROOT).as_posix()
         marker_path = DEFAULT_MARKER_PATH.relative_to(ROOT).as_posix()
         message = (
@@ -95,12 +122,19 @@ def check_study_health(
 
 
 def main() -> int:
-    market_date = dt.datetime.now(ZoneInfo("America/New_York")).date()
+    now = dt.datetime.now(ZoneInfo("America/New_York"))
+    market_date = now.date()
     summary_path = os.environ.get("GITHUB_STEP_SUMMARY", "-")
     try:
         state = StudyState.load(DEFAULT_STATE_PATH)
         broker = AlpacaBroker()
-        calendar_sessions = broker.calendar_sessions(market_date, market_date)
+        sessions = broker.calendar_sessions_with_closes(market_date, market_date)
+        calendar_sessions = [session_date for session_date, _close in sessions]
+        session_close = next(
+            (close for session_date, close in sessions
+             if session_date == market_date), None)
+        if market_date in calendar_sessions and session_close is None:
+            raise ValueError("Alpaca calendar did not return today's session close")
     except Exception as error:  # noqa: BLE001
         message = (
             "## Study health: unable to verify\n\n"
@@ -119,7 +153,9 @@ def main() -> int:
         return 1
 
     healthy = check_study_health(
-        state, market_date, calendar_sessions, summary_path)
+        state, market_date, calendar_sessions, summary_path,
+        session_close=session_close,
+        now=now)
     if summary_path != "-":
         print(
             "Study health: healthy" if healthy else
