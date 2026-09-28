@@ -127,17 +127,12 @@ def make_client_order_id(symbol: str, action: str, now: dt.datetime, *,
 
 def _entry_action_already_recorded(
         log: StudyLog, open_positions: Sequence[OpenPosition], symbol: str,
-        now: dt.datetime, client_order_id: str) -> bool:
+        client_order_id: str) -> bool:
     """Avoid replaying one entry action without blocking distinct same-day entries."""
-    utc = (now.replace(tzinfo=dt.timezone.utc) if now.utcoffset() is None
-           else now.astimezone(dt.timezone.utc))
-    market_date = utc.date().isoformat()
     normalized_symbol = symbol.strip().upper()
     for position in open_positions:
         if (position.ticker.strip().upper() == normalized_symbol
-                and position.entry_timestamp.startswith(market_date)
-                and (not position.position_id
-                     or position.position_id == client_order_id)):
+                and position.position_id == client_order_id):
             return True
 
     signals = [
@@ -150,18 +145,7 @@ def _entry_action_already_recorded(
            for row in signals):
         return True
 
-    trades = [
-        row for row in log.read("trades")
-        if row.get("ticker", "").strip().upper() == normalized_symbol
-        and row.get("entry_timestamp", "").startswith(market_date)
-    ]
-    identified_signals = {
-        row["notes"].split("client_order_id=", 1)[1].split()[0]
-        for row in signals
-        if "client_order_id=" in row.get("notes", "")
-        and row.get("timestamp", "").startswith(market_date)
-    }
-    return len(trades) > len(identified_signals)
+    return False
 
 
 def _candidate_action_identities(candidates: Sequence[Candidate]) -> list[str]:
@@ -356,7 +340,7 @@ def run_session(*, broker: BrokerLike, log: StudyLog,
             client_order_id = make_client_order_id(
                 candidate.symbol, "entry", now, identity=action_identity)
             if _entry_action_already_recorded(
-                    log, open_positions, candidate.symbol, now, client_order_id):
+                    log, open_positions, candidate.symbol, client_order_id):
                 log.log_signal(
                     ticker=candidate.symbol, signal_type="entry_candidate",
                     triggered_rule="duplicate_entry_action", action_taken="SKIPPED",

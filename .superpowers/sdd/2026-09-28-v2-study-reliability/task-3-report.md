@@ -440,3 +440,53 @@ Output:
 ```text
 247 passed in 9.34s
 ```
+
+## Remaining Review Fix: Closed Same-Day Trade False Positive (2026-09-28)
+
+Removed the same-day trade-row count fallback from
+`_entry_action_already_recorded`. Replay protection now compares the requested
+client order ID with IDs on open positions and recorded `ENTERED` signals; a
+closed trade row alone no longer blocks a distinct same-symbol entry. The
+existing identical-client-ID replay test remains in place, and a regression
+test covers a closed same-day trade followed by a distinct entry action.
+
+No V1 rows or CSV schemas, V2 start date or 60-session accounting, frozen
+universe, workflow state commit boundary, Section 5 minimum or targets,
+dependencies, or credentials changed. Scheduled attempts and watchdog
+recovery remain dependent on GitHub and provider availability; no guaranteed
+uptime is claimed.
+
+### RED
+
+Command:
+
+```text
+python -m pytest tests/test_session.py::test_closed_same_day_trade_does_not_block_distinct_entry_action -q
+```
+
+Output:
+
+```text
+1 failed in 0.32s
+```
+
+The candidate was incorrectly skipped after the helper counted the prior
+same-day closed trade against the new action.
+
+### GREEN
+
+Focused command:
+
+```text
+python -m pytest tests/test_broker.py tests/test_session.py -q
+```
+
+Output:
+
+```text
+34 passed in 0.97s
+```
+
+The focused run includes both the new closed-trade regression and
+`test_replaying_recorded_entry_action_is_skipped`, which confirms an identical
+recorded client ID remains blocked.

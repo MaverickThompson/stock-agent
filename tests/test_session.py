@@ -181,6 +181,25 @@ def test_replaying_recorded_entry_action_is_skipped(tmp_path):
     assert held[0].remaining == broker.orders[0][1]
 
 
+def test_closed_same_day_trade_does_not_block_distinct_entry_action(tmp_path):
+    log = StudyLog(tmp_path)
+    log.close_trade(
+        entry_timestamp="2026-09-22T13:00:00Z", ticker="AAPL",
+        direction="long", entry_price=100.0, size=10,
+        thesis_at_entry="prior thesis", invalidation_condition="prior invalidation",
+        exit_timestamp="2026-09-22T14:00:00Z", exit_price=101.0,
+        exit_reason="target_1", was_thesis_correct=True)
+    broker = FakeBroker({"AAPL": FakeQuote(100.9, 101.0)})
+
+    result = session.run_session(
+        broker=broker, log=log,
+        candidates=[Candidate("AAPL", 1.0, action_id="new-entry-action")],
+        thesis_for=lambda c: thesis_ok(), open_positions=[], now=NOW)
+
+    assert result.entered == 1
+    assert log.read("signals")[-1]["action_taken"] == "ENTERED"
+
+
 def test_distinct_same_symbol_entries_on_the_same_day_get_distinct_ids(tmp_path):
     broker = FakeBroker({"AAPL": FakeQuote(100.9, 101.0)})
 
