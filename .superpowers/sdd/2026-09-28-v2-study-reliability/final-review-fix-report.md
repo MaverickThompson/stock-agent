@@ -72,3 +72,36 @@ The full suite reports one third-party `DeprecationWarning` from
 which imports `websockets.legacy`. This is an existing dependency/import-path
 warning, not a warning from the changed application code; it was not broadly
 suppressed and no dependency was added or changed.
+
+## Follow-up: explicit action IDs survive candidate reordering
+
+The scoped re-review found that explicit action IDs were still suffixed with
+the same-symbol occurrence index, so reordering candidates could change the
+broker client ID. Explicit IDs are now used as the complete logical identity;
+the occurrence suffix remains only for candidates without explicit IDs.
+
+RED:
+
+```text
+python -m pytest tests/test_session.py::test_explicit_entry_ids_are_stable_when_same_symbol_candidates_reorder -q
+```
+
+Result: **1 failed**. The same explicit action received a different client
+order ID after the two same-symbol candidates were reordered.
+
+GREEN:
+
+```text
+python -m pytest tests/test_session.py -q
+```
+
+Result: **32 passed**.
+
+Full verification:
+
+```text
+python -m pytest -q
+```
+
+Result: **273 passed, 1 upstream websockets.legacy deprecation warning**.
+`git diff --check` passed.

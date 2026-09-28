@@ -182,10 +182,13 @@ def _candidate_action_identities(candidates: Sequence[Candidate]) -> list[str]:
     identities = []
     for candidate in candidates:
         symbol = candidate.symbol.strip().upper()
+        explicit_identity = candidate.action_id.strip()
+        if explicit_identity:
+            identities.append(f"action:{explicit_identity}")
+            continue
         occurrence = occurrences.get(symbol, 0)
         occurrences[symbol] = occurrence + 1
-        basis = candidate.action_id.strip() or f"symbol:{symbol}"
-        identities.append(f"{basis}|candidate={occurrence}")
+        identities.append(f"symbol:{symbol}|candidate={occurrence}")
     return identities
 
 

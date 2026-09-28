@@ -271,6 +271,24 @@ def test_entry_retry_keeps_id_when_candidate_ranking_changes(tmp_path):
     assert broker.client_order_ids[0] == broker.client_order_ids[1]
 
 
+def test_explicit_entry_ids_are_stable_when_same_symbol_candidates_reorder(tmp_path):
+    broker = FakeBroker({"AAPL": FakeQuote(100.9, 101.0)}, submit_failures=2)
+    log = StudyLog(tmp_path)
+    alpha = Candidate("AAPL", 1.0, "tech", action_id="alpha")
+    beta = Candidate("AAPL", 0.9, "finance", action_id="beta")
+
+    first = session.run_session(
+        broker=broker, log=log, candidates=[alpha, beta],
+        thesis_for=lambda c: thesis_ok(), open_positions=[], now=NOW)
+    second = session.run_session(
+        broker=broker, log=log, candidates=[beta, alpha],
+        thesis_for=lambda c: thesis_ok(), open_positions=[], now=NOW)
+
+    assert first.errors == 2 and second.entered == 2
+    assert broker.client_order_ids[0] == broker.client_order_ids[3]
+    assert broker.client_order_ids[1] == broker.client_order_ids[2]
+
+
 def test_same_day_reentry_after_full_close_gets_new_client_id(tmp_path):
     broker = FakeBroker({"AAPL": FakeQuote(100.9, 101.0)})
     log = StudyLog(tmp_path)
