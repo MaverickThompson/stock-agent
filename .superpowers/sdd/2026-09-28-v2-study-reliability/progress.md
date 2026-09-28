@@ -24,4 +24,5 @@
 - Task 6: complete (commits c966a0e..c87c6a7, task diff reviewed; focused/full-suite and preservation checks reported)
 - Final review fix wave: commit 6d586bf addressed partial-session counting, failure-state grouping, and pre-close watchdog behavior.
 - Final review finding: `_candidate_action_identities` appended occurrence to explicit action IDs, so same-symbol candidate reordering could change the broker order ID.
-- Follow-up fix: explicit IDs now are used as the complete logical identity; no-ID candidates retain the occurrence fallback. Added reordered same-symbol retry regression; full suite 273 passed; awaiting scoped re-review.
+- Follow-up fix: explicit IDs now are used as the complete logical identity; no-ID candidates retain the occurrence fallback. Added reordered same-symbol retry regression; full suite 273 passed; scoped re-review approved.
+- Final review complete: commit 7cc3b2a fixes the remaining retry identity issue; final suite 273 passed, one upstream deprecation warning; no open Critical/Important findings.
