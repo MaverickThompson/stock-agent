@@ -86,7 +86,13 @@ class RiskConfig:
     #: Stop distance as a multiple of ATR.
     atr_stop_multiple: float = 2.0
     #: Take-profit targets as multiples of the initial risk (R).
-    target_r_multiples: tuple[float, ...] = (1.5, 3.0)
+    # Section 5 requires reward-to-risk to Target 1 >= 2.0, but does not say
+    # where Target 1 sits -- an implementation mapping that was never recorded.
+    # The inherited backtest default of 1.5R made that gate unsatisfiable by
+    # construction (R:R = 1.5 < 2.0 always). 2.0 is the MINIMUM Section 5
+    # permits, so it is forced rather than chosen; Target 2 keeps the 1:2 ratio.
+    # Amendment 2026-09-28. tests/test_study_rules.py pins the invariant.
+    target_r_multiples: tuple[float, ...] = (2.0, 4.0)
     #: Reject any idea whose reward-to-risk is below this.
     min_reward_risk: float = 1.5
     #: Block new longs when the blackout flag is set (earnings, FOMC, CPI).

@@ -38,7 +38,7 @@ stop out together. 6% is the real ceiling on a bad day.
 
 ## Position exit
 
-- Take-profit targets at `risk.target_r_multiples = (1.5, 3.0)` — multiples of
+- Take-profit targets at `risk.target_r_multiples = (2.0, 4.0)` — multiples of
   the initial risk R.
 - The stop is placed with the broker at entry, not held mentally.
 - Every position carries a **falsification trigger** written before entry (the

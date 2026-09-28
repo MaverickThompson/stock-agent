@@ -149,3 +149,41 @@ def test_sized_to_zero_is_rejected_not_silently_skipped():
     result = rules.check_entry(**good_entry(nlv=100.0))
     assert not result.passed
     assert "zero shares" in result.reason
+
+
+# --- Amendment 2026-09-28: the Target-1 mapping must satisfy Section 5 -------
+
+def test_target_1_can_actually_clear_the_reward_to_risk_floor() -> None:
+    """Section 5: "Reward-to-risk to Target 1 >= 2.0 : 1".
+
+    Target 1 is placed at ``target_r_multiples[0]`` x risk, so R:R to Target 1
+    IS that multiple. If it is below MIN_REWARD_TO_RISK the gate can never pass
+    and the study cannot execute as written -- which is exactly what happened
+    between 2026-09-23 and 2026-09-28 with a multiple of 1.5 against a floor
+    of 2.0. This test exists so that can never silently recur.
+    """
+    from stockagent.config import Config
+    from stockagent import study_rules as rules
+
+    multiples = Config().risk.target_r_multiples
+    assert multiples, "Section 5 requires two targets"
+    assert min(multiples) >= rules.MIN_REWARD_TO_RISK, (
+        f"Target 1 at {min(multiples)}R cannot satisfy the "
+        f"{rules.MIN_REWARD_TO_RISK} R:R floor; the gate is unsatisfiable")
+
+
+def test_two_targets_are_configured() -> None:
+    """Section 5 closes 50% at Target 1 and the remainder at Target 2."""
+    from stockagent.config import Config
+    assert len(Config().risk.target_r_multiples) >= 2
+
+
+def test_reward_to_risk_of_the_configured_target_1() -> None:
+    """End to end: a trade built from config must clear the gate on the number."""
+    from stockagent.config import Config
+    from stockagent.study_rules import reward_to_risk, MIN_REWARD_TO_RISK
+
+    entry, stop = 100.0, 95.0
+    risk = entry - stop
+    t1 = entry + risk * Config().risk.target_r_multiples[0]
+    assert reward_to_risk(entry, stop, t1) >= MIN_REWARD_TO_RISK
