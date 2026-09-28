@@ -33,8 +33,8 @@
   frozen universe: 505 symbols, hash
   `1740586cb9153486954ea0eb311fdd11c7f6d752`.
 - `git diff --check` completed without errors.
-- Final branch diff against `origin/main`: **27 files changed, 2,870
-  insertions(+), 131 deletions(-)**.
+- Final branch diff against `origin/main`: **28 files changed, 2,916
+  insertions(+), 131 deletions(-)**, including this report.
 - Risk alignment commit: `b88a184` (`fix: align risk agent with Section 5
   floor`), with trailer `Co-authored-by: Copilot App
   <223556219+Copilot@users.noreply.github.com>`.
