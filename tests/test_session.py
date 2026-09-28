@@ -19,7 +19,7 @@ ROOT = pathlib.Path(__file__).parent.parent / "src" / "stockagent"
 pkg = types.ModuleType("sa")
 pkg.__path__ = [str(ROOT)]
 sys.modules["sa"] = pkg
-for name in ("study_log", "study_rules", "session"):
+for name in ("study_log", "study_rules", "study_state", "session"):
     spec = importlib.util.spec_from_file_location(f"sa.{name}", ROOT / f"{name}.py")
     mod = importlib.util.module_from_spec(spec)
     sys.modules[f"sa.{name}"] = mod
@@ -248,3 +248,35 @@ def test_every_candidate_leaves_a_row(tmp_path):
                         open_positions=[], now=NOW)
     logged = {r["ticker"] for r in log.read("signals")}
     assert logged == {"A", "B", "C"}
+
+
+def test_sixtieth_session_is_inert_without_touching_broker(tmp_path):
+    class ExplodingBroker:
+        def market_is_open(self):
+            raise AssertionError("completed study must not query the broker")
+
+    log = StudyLog(tmp_path)
+    result = session.run_session(
+        broker=ExplodingBroker(), log=log, candidates=[],
+        thesis_for=lambda c: None, open_positions=[], now=NOW,
+        completed_sessions=60)
+
+    assert result.ran is False
+    assert result.entered == result.exited == 0
+
+
+def test_final_successful_session_marks_open_positions_after_v2_start(tmp_path):
+    log = StudyLog(tmp_path)
+    held = [position()]
+    broker = FakeBroker({"AAPL": FakeQuote(105.0, 105.1)})
+    now = dt.datetime(2026, 10, 1, 15, 0, tzinfo=dt.timezone.utc)
+
+    result = session.run_session(
+        broker=broker, log=log, candidates=[], thesis_for=lambda c: None,
+        open_positions=held, now=now, completed_sessions=59)
+
+    assert result.ran is True
+    marks = [r for r in log.read("signals")
+             if r["signal_type"] == "end_of_window_mark"]
+    assert len(marks) == 1
+    assert marks[0]["action_taken"] == "SKIPPED"

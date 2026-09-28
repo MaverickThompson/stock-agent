@@ -1,6 +1,7 @@
 name: Study session
 
-# One session per US market day for the 60-day study.
+# Attempts one live session per US market date until 60 successful sessions
+# have been recorded. Missed or closed-market attempts do not advance progress.
 #
 # WHY THERE ARE NINETEEN CRON ENTRIES AND NOT ONE
 # -----------------------------------------------
@@ -10,10 +11,13 @@ name: Study session
 # scheduled for 14:45 UTC, fired at 21:02 UTC -- after the close -- and the
 # only thing it produced was a market_closed SYSTEM_ERROR row.
 #
-# A single scheduled time therefore cannot land inside market hours reliably.
-# Nineteen entries spread across the trading day can: whichever firing arrives
-# while the market is open does the session, and every later firing that day
-# sees the marker written below and exits after checkout, in about 20 seconds.
+# A single scheduled time therefore has a poor chance of landing inside market
+# hours. Nineteen entries spread across the trading day improve that chance:
+# whichever firing arrives while the market is open does the session, and later
+# firings that day see the marker below and exit after checkout.
+#
+# Scheduled attempts improve recovery but cannot guarantee uptime; GitHub's
+# scheduler/runners and the market-data and broker providers must be available.
 #
 # The entries run from 13:22 UTC (8 minutes before the EDT open) to 21:14 UTC
 # (14 minutes after the EST close), because the study window crosses the DST
@@ -170,6 +174,7 @@ jobs:
           # cache and is gitignored, so it is never added here.
           # last_session.txt is operational scheduling state, not a study log.
           git add study/signals.csv study/trades.csv study/universe.txt \
+                  study/open_positions.json study/v2_state.json \
                   study/last_session.txt || true
           if git diff --staged --quiet; then
             echo "no log rows this session"

@@ -29,6 +29,7 @@ from typing import Any, Callable, Protocol, Sequence
 
 from . import study_rules as rules
 from .study_log import StudyLog, utc_now_iso
+from .study_state import V2_SESSION_TARGET
 
 try:
     from .logging_setup import get_logger
@@ -143,6 +144,7 @@ def run_session(*, broker: BrokerLike, log: StudyLog,
                 now: dt.datetime | None = None,
                 falsified: Callable[[OpenPosition], bool] | None = None,
                 dry_run: bool = False,
+                completed_sessions: int = 0,
                 ) -> SessionResult:
     """Execute one session. Never raises for a per-symbol failure -- it logs.
 
@@ -152,20 +154,20 @@ def run_session(*, broker: BrokerLike, log: StudyLog,
     now = now or dt.datetime.now(dt.timezone.utc)
     sector_weights = dict(sector_weights or {})
     result = SessionResult()
+    today = now.date()
 
     # ---- Section 12 window boundary -------------------------------------
     # Section 5: "End of study window: marked to market, reported separately
-    # from closed trades." Positions open on the final day are NOT force-closed
-    # -- they are marked and reported as open. After the window the session is
-    # inert: no entries, no exits, nothing that could contaminate the record.
-    today = now.date()
-    if today > rules.STUDY_DAY_60:
+    # from closed trades." Positions open on the final successful session are
+    # NOT force-closed -- they are marked and reported as open. After the
+    # target is reached the session is inert regardless of the calendar date.
+    if completed_sessions >= V2_SESSION_TARGET:
         log.log_system_error(
             stage="window_closed",
-            detail=f"study window ended {rules.STUDY_DAY_60.isoformat()}; "
-                   f"session on {today.isoformat()} took no action")
+            detail=f"study completed {V2_SESSION_TARGET} successful sessions; "
+                   "session took no action")
         return result
-    final_day = today == rules.STUDY_DAY_60
+    final_session = completed_sessions == V2_SESSION_TARGET - 1
 
     if not broker.market_is_open():
         # Section 11 defect correction, 2026-09-24. GitHub's scheduler runs
@@ -327,7 +329,7 @@ def run_session(*, broker: BrokerLike, log: StudyLog,
             result.errors += 1
 
     LOG.info("session complete: %s", result.summary())
-    if final_day and open_positions:
+    if final_session and open_positions:
         # Mark, do not close. Reported separately from closed trades.
         for position in open_positions:
             try:
@@ -338,7 +340,7 @@ def run_session(*, broker: BrokerLike, log: StudyLog,
                 continue
             log.log_signal(ticker=position.ticker, signal_type="end_of_window_mark",
                            triggered_rule="section5_end_of_window",
-                           action_taken="MARKED", price_at_signal=quote.bid,
+                           action_taken="SKIPPED", price_at_signal=quote.bid,
                            notes=f"open at end of window; entry {position.entry_price}; "
                                  f"remaining {position.remaining}; quote {quote.timestamp}")
 

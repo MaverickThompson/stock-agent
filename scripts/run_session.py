@@ -26,9 +26,11 @@ from stockagent import observability  # noqa: E402
 from stockagent.broker import AlpacaBroker  # noqa: E402
 from stockagent.session import OpenPosition, run_session  # noqa: E402
 from stockagent.study_log import StudyLog, dry_run_passed  # noqa: E402
+from stockagent.study_state import StudyState  # noqa: E402
 
 STUDY_DIR = pathlib.Path(__file__).resolve().parent.parent / "study"
 STATE_PATH = STUDY_DIR / "open_positions.json"
+V2_STATE_PATH = STUDY_DIR / "v2_state.json"
 
 #: The UTC date of the last session that actually ran with the market open.
 #: The workflow fires many times a day because GitHub's scheduler is late by
@@ -64,6 +66,16 @@ def main() -> int:
         release=os.environ.get("GITHUB_SHA", "local")[:12])
 
     log = StudyLog(STUDY_DIR)
+    study_state = StudyState.load(V2_STATE_PATH)
+    today = dt.datetime.now(dt.timezone.utc).date()
+    if not study_state.is_eligible(today):
+        print(
+            f"V2 study is not eligible on {today.isoformat()} "
+            f"(completed_sessions={study_state.completed_sessions}, "
+            f"status={study_state.status})")
+        observability.flush()
+        return 0
+
     positions = load_open_positions()
     dry_run = os.environ.get("STUDY_DRY_RUN", "").strip().lower() in {
         "1", "true", "yes", "on"
@@ -100,20 +112,20 @@ def main() -> int:
     try:
         result = run_session(broker=broker, log=log, candidates=candidates,
                              thesis_for=thesis_for, open_positions=positions,
-                             dry_run=dry_run)
+                             dry_run=dry_run,
+                             completed_sessions=study_state.completed_sessions)
     except Exception as exc:  # noqa: BLE001
         log.log_system_error(stage="session", detail=f"{type(exc).__name__}: {exc}")
         observability.report(exc, stage="session")
         observability.flush()
         raise
 
-    if not dry_run:
+    if result.ran and not dry_run:
         save_open_positions(positions)
-        if result.ran:
-            LAST_SESSION_PATH.parent.mkdir(parents=True, exist_ok=True)
-            LAST_SESSION_PATH.write_text(
-                dt.datetime.now(dt.timezone.utc).date().isoformat() + "\n",
-                encoding="utf-8")
+        study_state = study_state.record_success(today)
+        study_state.save(V2_STATE_PATH)
+        LAST_SESSION_PATH.parent.mkdir(parents=True, exist_ok=True)
+        LAST_SESSION_PATH.write_text(today.isoformat() + "\n", encoding="utf-8")
     counts = log.row_counts()
     print(f"{result.summary()} | rows: signals={counts['signals']} "
           f"trades={counts['trades']} | dry-run-passing={dry_run_passed(counts)}")

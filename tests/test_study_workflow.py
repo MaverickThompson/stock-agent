@@ -29,23 +29,18 @@ def test_session_exposes_the_earnings_calendar_secret() -> None:
 
 # --- Section 12 window boundary ------------------------------------------
 
-def test_window_dates_span_60_market_days():
-    """Day 1 to Day 60 inclusive, weekdays, minus Thanksgiving 2026-11-26."""
+def test_v2_window_is_start_date_plus_60_successful_sessions():
+    """Completion is driven by counted market sessions, not calendar dates."""
     import datetime as dt
-    from stockagent import study_rules as rules
-    holidays = {dt.date(2026, 11, 26)}
-    d, n = rules.STUDY_DAY_1, 0
-    while d <= rules.STUDY_DAY_60:
-        if d.weekday() < 5 and d not in holidays:
-            n += 1
-        d += dt.timedelta(days=1)
-    assert n == 60, f"window spans {n} market days, not 60"
+    from stockagent.study_state import V2_SESSION_TARGET, V2_START_DATE
+
+    assert V2_START_DATE == dt.date(2026, 9, 29)
+    assert V2_SESSION_TARGET == 60
 
 
 def test_session_is_inert_after_the_window(monkeypatch, tmp_path):
-    """After Day 60 the session must take no action at all."""
+    """After 60 successes the session must take no action at all."""
     import datetime as dt
-    from stockagent import study_rules as rules
     from stockagent.session import run_session
     from stockagent.study_log import StudyLog
 
@@ -58,10 +53,10 @@ def test_session_is_inert_after_the_window(monkeypatch, tmp_path):
             raise AssertionError("no orders after the window")
 
     log = StudyLog(tmp_path)
-    after = dt.datetime.combine(rules.STUDY_DAY_60 + dt.timedelta(days=1),
-                                dt.time(15, 0), tzinfo=dt.timezone.utc)
+    after = dt.datetime(2026, 12, 16, 15, 0, tzinfo=dt.timezone.utc)
     result = run_session(broker=ExplodingBroker(), log=log, candidates=[],
-                         thesis_for=lambda c: None, open_positions=[], now=after)
+                         thesis_for=lambda c: None, open_positions=[], now=after,
+                         completed_sessions=60)
     assert result.entered == 0 and result.exited == 0
     rows = log.read("signals")
     assert any("window_closed" in str(r) for r in rows), rows
@@ -135,7 +130,7 @@ def test_every_working_step_is_gated_by_the_guard() -> None:
 def test_session_marks_the_day_as_run(monkeypatch, tmp_path) -> None:
     """``ran`` is what tells the later firings the market day is finished."""
     import datetime as dt
-    from stockagent import study_rules as rules
+    from stockagent.study_state import V2_START_DATE
     from stockagent.session import run_session
     from stockagent.study_log import StudyLog
 
@@ -144,7 +139,7 @@ def test_session_marks_the_day_as_run(monkeypatch, tmp_path) -> None:
     log = StudyLog(tmp_path)
     result = run_session(broker=FakeBroker({}), log=log, candidates=[],
                          thesis_for=lambda c: None, open_positions=[],
-                         now=dt.datetime.combine(rules.STUDY_DAY_1,
+                         now=dt.datetime.combine(V2_START_DATE,
                                                  dt.time(14, 0),
                                                  tzinfo=dt.timezone.utc))
     assert result.ran is True
@@ -152,7 +147,7 @@ def test_session_marks_the_day_as_run(monkeypatch, tmp_path) -> None:
 
 def test_closed_market_does_not_mark_the_day_as_run(tmp_path) -> None:
     import datetime as dt
-    from stockagent import study_rules as rules
+    from stockagent.study_state import V2_START_DATE
     from stockagent.session import run_session
     from stockagent.study_log import StudyLog
 
@@ -161,7 +156,7 @@ def test_closed_market_does_not_mark_the_day_as_run(tmp_path) -> None:
     log = StudyLog(tmp_path)
     result = run_session(broker=FakeBroker({}, is_open=False), log=log, candidates=[],
                          thesis_for=lambda c: None, open_positions=[],
-                         now=dt.datetime.combine(rules.STUDY_DAY_1,
+                         now=dt.datetime.combine(V2_START_DATE,
                                                  dt.time(12, 0),
                                                  tzinfo=dt.timezone.utc))
     assert result.ran is False
@@ -170,7 +165,7 @@ def test_closed_market_does_not_mark_the_day_as_run(tmp_path) -> None:
 def test_repeat_firings_log_one_market_closed_row_per_day(tmp_path) -> None:
     """Nineteen firings on a holiday must not write nineteen identical rows."""
     import datetime as dt
-    from stockagent import study_rules as rules
+    from stockagent.study_state import V2_START_DATE
     from stockagent.session import run_session
     from stockagent.study_log import StudyLog
 
@@ -178,7 +173,7 @@ def test_repeat_firings_log_one_market_closed_row_per_day(tmp_path) -> None:
 
     broker = FakeBroker({}, is_open=False)
     log = StudyLog(tmp_path)
-    day = rules.STUDY_DAY_1
+    day = V2_START_DATE
     for hour in (13, 14, 15, 16, 17):
         run_session(broker=broker, log=log, candidates=[],
                     thesis_for=lambda c: None, open_positions=[],
@@ -214,9 +209,23 @@ def test_marker_is_only_written_after_a_session_that_ran() -> None:
     script = (pathlib.Path(__file__).parent.parent
               / "scripts" / "run_session.py").read_text(encoding="utf-8")
     write = script.index("LAST_SESSION_PATH.write_text")
-    guard = script.index("if result.ran:")
+    guard = script.index("if result.ran and not dry_run:")
     assert guard < write
-    assert "if not dry_run:" in script[:guard]
+
+
+def test_commit_step_keeps_all_session_state_and_logs_together() -> None:
+    """Progress and its related artifacts must survive the same workflow run."""
+    workflow = WORKFLOW.read_text(encoding="utf-8")
+    commit = workflow[workflow.index("- name: Commit the logs"):]
+
+    for path in (
+        "study/signals.csv",
+        "study/trades.csv",
+        "study/open_positions.json",
+        "study/v2_state.json",
+        "study/last_session.txt",
+    ):
+        assert path in commit, f"{path} is not committed with the study run"
 
 
 def test_checkout_resolves_the_branch_not_the_triggering_sha() -> None:
@@ -232,3 +241,109 @@ def test_checkout_resolves_the_branch_not_the_triggering_sha() -> None:
     guard = workflow.index("id: guard")
     assert "ref: main" in workflow[checkout:guard], (
         "checkout does not pin to the branch, so the guard can read a stale marker")
+
+
+def _run_session_script(monkeypatch, tmp_path, state, *, is_open=True,
+                       dry_run=False, run_session=None):
+    import datetime as dt
+    import importlib.util
+    import sys
+    import types
+
+    from stockagent import study_state
+    from test_session import FakeBroker
+
+    script = pathlib.Path(__file__).parent.parent / "scripts" / "run_session.py"
+    spec = importlib.util.spec_from_file_location("study_run_session", script)
+    runner = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(runner)
+
+    study_dir = tmp_path / "study"
+    monkeypatch.setattr(runner, "STUDY_DIR", study_dir)
+    monkeypatch.setattr(runner, "STATE_PATH", study_dir / "open_positions.json")
+    monkeypatch.setattr(runner, "V2_STATE_PATH", study_dir / "v2_state.json")
+    monkeypatch.setattr(runner, "LAST_SESSION_PATH", study_dir / "last_session.txt")
+    runner.V2_STATE_PATH.parent.mkdir(parents=True)
+    state.save(runner.V2_STATE_PATH)
+
+    real_datetime = dt.datetime
+
+    class FrozenDateTime(real_datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return cls(2026, 9, 29, 15, 0, tzinfo=tz)
+
+    monkeypatch.setattr(runner.dt, "datetime", FrozenDateTime)
+    monkeypatch.setenv("STUDY_DRY_RUN", "true" if dry_run else "false")
+    monkeypatch.setattr(runner.observability, "init_sentry", lambda **kwargs: None)
+    monkeypatch.setattr(runner.observability, "flush", lambda: None)
+    monkeypatch.setattr(
+        runner, "AlpacaBroker",
+        lambda: FakeBroker({}, is_open=is_open))
+
+    adapter = types.ModuleType("stockagent.study_adapter")
+    adapter.candidates_for_session = lambda: []
+    adapter.thesis_for = lambda candidate: None
+    monkeypatch.setitem(sys.modules, "stockagent.study_adapter", adapter)
+    if run_session is not None:
+        monkeypatch.setattr(runner, "run_session", run_session)
+
+    status = runner.main()
+    return status, runner, study_state.StudyState.load(runner.V2_STATE_PATH)
+
+
+def test_runner_records_one_successful_live_session(monkeypatch, tmp_path):
+    import datetime as dt
+    from stockagent.study_state import StudyState, V2_START_DATE
+
+    initial = StudyState(1, V2_START_DATE, 0, None, "active")
+
+    status, runner, updated = _run_session_script(monkeypatch, tmp_path, initial)
+
+    assert status == 0
+    assert updated.completed_sessions == 1
+    assert updated.last_session_date == dt.date(2026, 9, 29)
+    assert runner.LAST_SESSION_PATH.read_text(encoding="utf-8").strip() == "2026-09-29"
+
+
+def test_runner_does_not_increment_the_same_date_twice(monkeypatch, tmp_path):
+    import datetime as dt
+    from stockagent.study_state import StudyState, V2_START_DATE
+
+    initial = StudyState(1, V2_START_DATE, 1, dt.date(2026, 9, 29), "active")
+
+    def unexpected_run(**kwargs):
+        raise AssertionError("a duplicate date must not run again")
+
+    status, runner, unchanged = _run_session_script(
+        monkeypatch, tmp_path, initial, run_session=unexpected_run)
+
+    assert status == 0
+    assert unchanged == initial
+    assert not runner.LAST_SESSION_PATH.exists()
+
+
+def test_runner_does_not_increment_a_closed_market_attempt(monkeypatch, tmp_path):
+    from stockagent.study_state import StudyState, V2_START_DATE
+
+    initial = StudyState(1, V2_START_DATE, 0, None, "active")
+
+    status, runner, unchanged = _run_session_script(
+        monkeypatch, tmp_path, initial, is_open=False)
+
+    assert status == 0
+    assert unchanged == initial
+    assert not runner.LAST_SESSION_PATH.exists()
+
+
+def test_runner_does_not_persist_v2_progress_for_a_dry_run(monkeypatch, tmp_path):
+    from stockagent.study_state import StudyState, V2_START_DATE
+
+    initial = StudyState(1, V2_START_DATE, 0, None, "active")
+
+    status, runner, unchanged = _run_session_script(
+        monkeypatch, tmp_path, initial, dry_run=True)
+
+    assert status == 0
+    assert unchanged == initial
+    assert not runner.LAST_SESSION_PATH.exists()
