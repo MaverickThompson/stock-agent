@@ -157,6 +157,34 @@ class AlpacaBroker:
         """Return Alpaca's clock, including the next regular-session open."""
         return _retry(self._trading.get_clock, "get_clock")
 
+    def calendar_sessions(
+        self, start_date: dt.date, end_date: dt.date,
+    ) -> list[dt.date]:
+        """Return Alpaca calendar session dates in the inclusive range."""
+        if type(start_date) is not dt.date or type(end_date) is not dt.date:
+            raise TypeError("calendar bounds must be dates")
+        if end_date < start_date:
+            raise ValueError("calendar end_date cannot precede start_date")
+
+        from alpaca.trading.requests import GetCalendarRequest
+
+        raw_calendar = _retry(
+            lambda: self._trading.get_calendar(
+                GetCalendarRequest(start=start_date, end=end_date)),
+            "get_calendar",
+        )
+        dates: list[dt.date] = []
+        for entry in raw_calendar:
+            session_date = entry.date
+            if isinstance(session_date, dt.datetime):
+                session_date = session_date.date()
+            elif isinstance(session_date, str):
+                session_date = dt.date.fromisoformat(session_date)
+            if type(session_date) is not dt.date:
+                raise BrokerError("Alpaca returned an invalid calendar session date")
+            dates.append(session_date)
+        return dates
+
     # -- quotes -------------------------------------------------------------
 
     def quote(self, symbol: str, *, now: dt.datetime | None = None) -> Quote:
