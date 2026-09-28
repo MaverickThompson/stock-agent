@@ -136,8 +136,7 @@ def _entry_action_already_recorded(
     for position in open_positions:
         if (position.ticker.strip().upper() == normalized_symbol
                 and position.entry_timestamp.startswith(market_date)
-                and (not position.position_id
-                     or position.position_id == client_order_id)):
+                and position.position_id == client_order_id):
             return True
 
     tracked_trade_quantities: dict[tuple[str, str], int] = {}

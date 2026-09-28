@@ -342,6 +342,32 @@ python -m pytest tests/test_broker.py tests/test_session.py -q
 
 Output: `35 passed in 1.00s`. `git diff --check` also passed.
 
+## Review Fix Round 4 (2026-09-28)
+
+The follow-up review found that an open same-day position with an empty
+`position_id` was treated as an exact duplicate. The early position guard now
+suppresses only a matching non-empty client order ID; ID-less tracked quantities
+are handled by trade-row reconciliation instead.
+
+The regression uses an ID-less tracked position and a distinct entry action.
+Before the fix it was incorrectly skipped.
+
+RED command:
+
+```text
+python -m pytest tests/test_session.py::test_idless_same_day_position_does_not_block_distinct_entry_action -q
+```
+
+Output: `1 failed` because the distinct action was skipped.
+
+GREEN command:
+
+```text
+python -m pytest tests/test_broker.py tests/test_session.py -q
+```
+
+Output: `36 passed in 1.03s`. `git diff --check` also passed.
+
 No V1 rows or CSV schemas, study state, daily marker, target configuration,
 universe, dependencies, credentials, workflows, or uptime claims were changed.
 

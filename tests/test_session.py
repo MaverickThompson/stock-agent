@@ -221,6 +221,26 @@ def test_unmatched_same_day_entry_trade_blocks_replay_after_crash(tmp_path):
     assert len(log.read("trades")) == 1
 
 
+def test_idless_same_day_position_does_not_block_distinct_entry_action(tmp_path):
+    log = StudyLog(tmp_path)
+    log.open_trade(
+        entry_timestamp="2026-09-22T14:31:00Z", ticker="AAPL",
+        direction="long", entry_price=101.0, size=200,
+        thesis_at_entry="tracked prior position", invalidation_condition="below 96.40")
+    broker = FakeBroker({"AAPL": FakeQuote(100.9, 101.0)})
+
+    result = session.run_session(
+        broker=broker, log=log, candidates=[
+            Candidate("AAPL", 1.0, action_id="distinct-entry")],
+        thesis_for=lambda c: thesis_ok(),
+        open_positions=[position(
+            size=200, remaining=200, entry_timestamp="2026-09-22T14:31:00Z")],
+        now=NOW)
+
+    assert result.entered == 1
+    assert broker.client_order_ids
+
+
 def test_distinct_same_symbol_entries_on_the_same_day_get_distinct_ids(tmp_path):
     broker = FakeBroker({"AAPL": FakeQuote(100.9, 101.0)})
 
