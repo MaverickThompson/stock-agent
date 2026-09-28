@@ -30,7 +30,7 @@ stop out together. 6% is the real ceiling on a bad day.
 - Shares = `floor(risk_budget / |entry - stop|)`. If that rounds to zero, there
   is no trade.
 - Reward-to-risk to the first target must be at least
-  `risk.min_reward_risk = 1.5`.
+  `risk.min_reward_risk = 2.0`.
 - No new entries during a news blackout — earnings, FOMC, CPI
   (`risk.news_blackout_days = 1`). Set `live["news_blackout"]` to activate.
 - No new long exposure when the regime is `Bear` or `HighVolatility` at ≥50%
