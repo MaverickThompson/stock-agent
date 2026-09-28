@@ -7,7 +7,7 @@ name: Study session
 # -----------------------------------------------
 # GitHub's scheduler does not run a cron entry at the time written. It runs it
 # when the shared runner pool has room, and the observed lateness on this repo
-# has been 3h32m, 5h00m, 6h17m and ~4h. Day 1 of the study (2026-09-23) was
+# has been 3h32m, 5h00m, 6h17m and ~4h. V1 Day 1 of the study (2026-09-23) was
 # scheduled for 14:45 UTC, fired at 21:02 UTC -- after the close -- and the
 # only thing it produced was a market_closed SYSTEM_ERROR row.
 #
@@ -153,6 +153,7 @@ jobs:
         run: python scripts/wait_for_market_open.py
 
       - name: Run session
+        id: run_session
         if: steps.guard.outputs.skip == 'false' && steps.market_open.outputs.ready == 'true'
         env:
           ALPACA_API_KEY: ${{ secrets.ALPACA_API_KEY }}
@@ -173,9 +174,13 @@ jobs:
           # Section 10 defines exactly two logs. The earnings calendar is a
           # cache and is gitignored, so it is never added here.
           # last_session.txt is operational scheduling state, not a study log.
-          git add study/signals.csv study/trades.csv study/universe.txt \
-                  study/open_positions.json study/v2_state.json \
-                  study/last_session.txt || true
+          git add study/signals.csv study/trades.csv study/universe.txt || true
+          if [ "${{ steps.run_session.conclusion }}" = "success" ]; then
+            git add study/open_positions.json study/v2_state.json \
+                    study/last_session.txt || true
+          else
+            echo "Run session did not succeed; leaving progress artifacts unstaged"
+          fi
           if git diff --staged --quiet; then
             echo "no log rows this session"
           else

@@ -228,6 +228,35 @@ def test_commit_step_keeps_all_session_state_and_logs_together() -> None:
         assert path in commit, f"{path} is not committed with the study run"
 
 
+def test_commit_step_stages_progress_only_after_run_session_succeeds() -> None:
+    """Failed runner writes stay local while failure logs can still be committed."""
+    workflow = WORKFLOW.read_text(encoding="utf-8")
+    run_step = workflow[workflow.index("- name: Run session"):
+                        workflow.index("- name: Commit the logs")]
+    commit = workflow[workflow.index("- name: Commit the logs"):]
+
+    assert "id: run_session" in run_step
+    assert "if: always() && steps.guard.outputs.skip == 'false'" in commit
+
+    gate = 'if [ "${{ steps.run_session.conclusion }}" = "success" ]; then'
+    gate_start = commit.index(gate)
+    gate_end = commit.index("\n          fi", gate_start)
+    gated_staging = commit[gate_start:gate_end]
+    active_commit = "\n".join(
+        line for line in commit.splitlines()
+        if not line.lstrip().startswith("#"))
+    unguarded_commit = active_commit.replace(gated_staging, "")
+    for path in (
+        "study/open_positions.json",
+        "study/v2_state.json",
+        "study/last_session.txt",
+    ):
+        assert path in gated_staging, f"{path} is not gated on runner success"
+        assert path not in unguarded_commit, f"{path} can be staged without success"
+
+    assert "git add study/signals.csv study/trades.csv study/universe.txt" in commit
+
+
 def test_checkout_resolves_the_branch_not_the_triggering_sha() -> None:
     """A queued firing must not restore a tree from before the marker landed.
 
