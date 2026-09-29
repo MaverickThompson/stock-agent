@@ -3,14 +3,23 @@
 from __future__ import annotations
 
 import datetime as dt
+import importlib.util
 import pathlib
+import sys
 from zoneinfo import ZoneInfo
 
 from stockagent.study_state import StudyState, V2_SESSION_TARGET, V2_START_DATE
-from scripts.check_study_health import check_study_health
 
 ROOT = pathlib.Path(__file__).parent.parent
 HEALTH_WORKFLOW = ROOT / ".github" / "workflows" / "study-health-check.yml"
+HEALTH_SCRIPT = ROOT / "scripts" / "check_study_health.py"
+HEALTH_SPEC = importlib.util.spec_from_file_location(
+    "check_study_health", HEALTH_SCRIPT)
+assert HEALTH_SPEC is not None and HEALTH_SPEC.loader is not None
+health_module = importlib.util.module_from_spec(HEALTH_SPEC)
+sys.modules[HEALTH_SPEC.name] = health_module
+HEALTH_SPEC.loader.exec_module(health_module)
+check_study_health = health_module.check_study_health
 
 
 def _state(*, completed=0, last_session_date=None, status="active"):
