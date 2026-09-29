@@ -25,10 +25,12 @@ from __future__ import annotations
 
 import dataclasses
 import datetime as dt
+import hashlib
 from typing import Any, Callable, Protocol, Sequence
 
 from . import study_rules as rules
 from .study_log import StudyLog, utc_now_iso
+from .study_state import V2_SESSION_TARGET
 
 try:
     from .logging_setup import get_logger
@@ -47,6 +49,7 @@ class Candidate:
     symbol: str
     score: float
     sector: str = "unknown"
+    action_id: str = ""
 
 
 @dataclasses.dataclass(frozen=True)
@@ -82,6 +85,19 @@ class OpenPosition:
     thesis: str
     invalidation: str
     target_1_hit: bool = False
+    target_1_filled: int = 0
+    position_id: str = ""
+
+    def __post_init__(self) -> None:
+        planned_target_1 = max(1, self.size // 2)
+        if self.target_1_hit and self.target_1_filled == 0:
+            # Older persisted positions only recorded the boolean. Their stop
+            # was already moved to entry, so preserve that completed state.
+            self.target_1_filled = planned_target_1
+        if not 0 <= self.target_1_filled <= planned_target_1:
+            raise ValueError("target_1_filled must be within the planned Target 1 quantity")
+        if self.target_1_filled == planned_target_1:
+            self.target_1_hit = True
 
     def age_days(self, now: dt.datetime) -> float:
         entered = dt.datetime.strptime(self.entry_timestamp, "%Y-%m-%dT%H:%M:%SZ")
@@ -93,7 +109,103 @@ class BrokerLike(Protocol):
     def positions(self) -> dict[str, int]: ...
     def market_is_open(self) -> bool: ...
     def quote(self, symbol: str) -> Any: ...
-    def submit(self, symbol: str, qty: int, side: str, *, quote: Any = None) -> Any: ...
+    def submit(self, symbol: str, qty: int, side: str, *,
+               client_order_id: str, quote: Any = None) -> Any: ...
+
+
+def make_client_order_id(symbol: str, action: str, now: dt.datetime, *,
+                         identity: str = "") -> str:
+    """Build a deterministic Alpaca ID for one V2 action on a UTC market date."""
+    utc = (now.replace(tzinfo=dt.timezone.utc) if now.utcoffset() is None
+           else now.astimezone(dt.timezone.utc))
+    market_date = utc.date().strftime("%Y%m%d")
+    key = (f"v2|{market_date}|{symbol.strip().upper()}|"
+           f"{action.strip().lower()}|{identity}")
+    digest = hashlib.sha256(key.encode("utf-8")).hexdigest()[:32]
+    return f"v2-{market_date}-{digest}"
+
+
+def _entry_action_already_recorded(
+        log: StudyLog, open_positions: Sequence[OpenPosition], symbol: str,
+        now: dt.datetime, client_order_id: str) -> bool:
+    """Avoid replaying one entry action without blocking distinct same-day entries."""
+    utc = (now.replace(tzinfo=dt.timezone.utc) if now.utcoffset() is None
+           else now.astimezone(dt.timezone.utc))
+    market_date = utc.date().isoformat()
+    normalized_symbol = symbol.strip().upper()
+    for position in open_positions:
+        if (position.ticker.strip().upper() == normalized_symbol
+                and position.entry_timestamp.startswith(market_date)
+                and position.position_id == client_order_id):
+            return True
+
+    tracked_trade_quantities: dict[tuple[str, str], int] = {}
+    for position in open_positions:
+        if (position.ticker.strip().upper() == normalized_symbol
+                and position.entry_timestamp.startswith(market_date)):
+            key = (position.entry_timestamp, normalized_symbol)
+            tracked_trade_quantities[key] = (
+                tracked_trade_quantities.get(key, 0) + position.remaining)
+
+    signals = [
+        row for row in log.read("signals")
+        if row.get("ticker", "").strip().upper() == normalized_symbol
+        and row.get("signal_type") == "entry_candidate"
+        and row.get("action_taken") == "ENTERED"
+    ]
+    if any(f"client_order_id={client_order_id}" in row.get("notes", "")
+           for row in signals):
+        return True
+
+    trades: dict[tuple[str, str], dict[str, int]] = {}
+    for row in log.read("trades"):
+        entry_timestamp = row.get("entry_timestamp", "")
+        if (row.get("ticker", "").strip().upper() != normalized_symbol
+                or not entry_timestamp.startswith(market_date)):
+            continue
+        key = (entry_timestamp, normalized_symbol)
+        quantities = trades.setdefault(key, {"entry": 0, "exited": 0})
+        size = int(row["size"])
+        if row.get("exit_timestamp"):
+            quantities["exited"] += size
+        else:
+            quantities["entry"] += size
+
+    return any(qty["entry"] - qty["exited"]
+               > tracked_trade_quantities.get(key, 0)
+               for key, qty in trades.items())
+
+
+def _candidate_action_identities(candidates: Sequence[Candidate]) -> list[str]:
+    """Identify ranked actions without using mutable ranking attributes."""
+    occurrences: dict[str, int] = {}
+    identities = []
+    for candidate in candidates:
+        symbol = candidate.symbol.strip().upper()
+        explicit_identity = candidate.action_id.strip()
+        if explicit_identity:
+            identities.append(f"action:{explicit_identity}")
+            continue
+        occurrence = occurrences.get(symbol, 0)
+        occurrences[symbol] = occurrence + 1
+        identities.append(f"symbol:{symbol}|candidate={occurrence}")
+    return identities
+
+
+def _closed_entry_cycles(log: StudyLog, symbol: str, market_date: str) -> int:
+    """Count fully closed same-day entries so a later cycle gets a fresh ID."""
+    quantities: dict[str, list[int]] = {}
+    normalized_symbol = symbol.strip().upper()
+    for row in log.read("trades"):
+        entry_timestamp = row.get("entry_timestamp", "")
+        if (row.get("ticker", "").strip().upper() != normalized_symbol
+                or not entry_timestamp.startswith(market_date)):
+            continue
+        totals = quantities.setdefault(entry_timestamp, [0, 0])
+        size = int(row["size"])
+        totals[1 if row.get("exit_timestamp") else 0] += size
+    return sum(exited >= entered and entered > 0
+               for entered, exited in quantities.values())
 
 
 def evaluate_exit(position: OpenPosition, bid: float, now: dt.datetime,
@@ -108,8 +220,10 @@ def evaluate_exit(position: OpenPosition, bid: float, now: dt.datetime,
         return ("stop", position.remaining)
     if falsified:
         return ("falsification", position.remaining)
-    if not position.target_1_hit and bid >= position.target_1:
-        return ("target_1", max(1, position.size // 2))
+    planned_target_1 = max(1, position.size // 2)
+    target_1_remaining = planned_target_1 - position.target_1_filled
+    if target_1_remaining > 0 and bid >= position.target_1:
+        return ("target_1", min(target_1_remaining, position.remaining))
     if position.target_1_hit and bid >= position.target_2:
         return ("target_2", position.remaining)
     if position.age_days(now) >= rules.TIME_STOP_DAYS:
@@ -143,6 +257,7 @@ def run_session(*, broker: BrokerLike, log: StudyLog,
                 now: dt.datetime | None = None,
                 falsified: Callable[[OpenPosition], bool] | None = None,
                 dry_run: bool = False,
+                completed_sessions: int = 0,
                 ) -> SessionResult:
     """Execute one session. Never raises for a per-symbol failure -- it logs.
 
@@ -152,20 +267,20 @@ def run_session(*, broker: BrokerLike, log: StudyLog,
     now = now or dt.datetime.now(dt.timezone.utc)
     sector_weights = dict(sector_weights or {})
     result = SessionResult()
+    today = now.date()
 
     # ---- Section 12 window boundary -------------------------------------
     # Section 5: "End of study window: marked to market, reported separately
-    # from closed trades." Positions open on the final day are NOT force-closed
-    # -- they are marked and reported as open. After the window the session is
-    # inert: no entries, no exits, nothing that could contaminate the record.
-    today = now.date()
-    if today > rules.STUDY_DAY_60:
+    # from closed trades." Positions open on the final successful session are
+    # NOT force-closed -- they are marked and reported as open. After the
+    # target is reached the session is inert regardless of the calendar date.
+    if completed_sessions >= V2_SESSION_TARGET:
         log.log_system_error(
             stage="window_closed",
-            detail=f"study window ended {rules.STUDY_DAY_60.isoformat()}; "
-                   f"session on {today.isoformat()} took no action")
+            detail=f"study completed {V2_SESSION_TARGET} successful sessions; "
+                   "session took no action")
         return result
-    final_day = today == rules.STUDY_DAY_60
+    final_session = completed_sessions == V2_SESSION_TARGET - 1
 
     if not broker.market_is_open():
         # Section 11 defect correction, 2026-09-24. GitHub's scheduler runs
@@ -208,11 +323,25 @@ def run_session(*, broker: BrokerLike, log: StudyLog,
                                      f"{position.remaining}; quote {quote.timestamp}")
                 result.skipped += 1
                 continue
-            fill = broker.submit(position.ticker, qty, "sell", quote=quote)
+            fill = broker.submit(
+                position.ticker, qty, "sell",
+                client_order_id=make_client_order_id(
+                    position.ticker, reason, now,
+                    identity=(
+                        f"{position.position_id or position.entry_timestamp}|"
+                        + (f"target_1_filled={position.target_1_filled}"
+                           if reason == "target_1"
+                           else f"remaining={position.remaining}"))),
+                quote=quote)
+            filled_qty = int(fill.qty)
+            if filled_qty <= 0 or filled_qty > qty:
+                raise ValueError(
+                    f"broker returned invalid exit fill quantity {filled_qty} "
+                    f"for a {qty}-share request")
             log.close_trade(
                 entry_timestamp=position.entry_timestamp, ticker=position.ticker,
                 direction=position.direction, entry_price=position.entry_price,
-                size=qty, thesis_at_entry=position.thesis,
+                size=filled_qty, thesis_at_entry=position.thesis,
                 invalidation_condition=position.invalidation,
                 exit_timestamp=fill.filled_at, exit_price=fill.filled_price,
                 exit_reason=reason,
@@ -220,12 +349,15 @@ def run_session(*, broker: BrokerLike, log: StudyLog,
             log.log_signal(ticker=position.ticker, signal_type="exit",
                            triggered_rule=reason, action_taken="EXITED",
                            price_at_signal=fill.filled_price,
-                           notes=f"qty {qty} of {position.remaining}; "
+                           notes=f"qty {filled_qty} of {position.remaining}; "
                                  f"quote {quote.timestamp}")
-            position.remaining -= qty
+            position.remaining -= filled_qty
             if reason == "target_1":
-                position.target_1_hit = True
-                position.stop = position.entry_price   # Section 5: stop to entry
+                position.target_1_filled += filled_qty
+                planned_target_1 = max(1, position.size // 2)
+                if position.target_1_filled >= planned_target_1:
+                    position.target_1_hit = True
+                    position.stop = position.entry_price  # Section 5: stop to entry
             if position.remaining <= 0:
                 open_positions.remove(position)
             result.exited += 1
@@ -236,11 +368,27 @@ def run_session(*, broker: BrokerLike, log: StudyLog,
             result.errors += 1
 
     # -- 2. new entries -----------------------------------------------------
-    account = broker.account()
-    nlv = float(account.equity)
+    account_error: str | None = None
+    try:
+        account = broker.account()
+    except Exception as exc:  # noqa: BLE001 - exits above may already have filled
+        account = None
+        account_error = f"{type(exc).__name__}: {exc}"
+        log.log_system_error(stage="account", detail=account_error)
+        result.errors += 1
+    nlv = float(account.equity) if account is not None else 0.0
     open_risk = len(open_positions) * rules.RISK_PER_TRADE
 
-    for candidate in candidates:
+    candidate_action_ids = _candidate_action_identities(candidates)
+    for candidate, action_identity in zip(candidates, candidate_action_ids):
+        if account is None:
+            log.log_system_error(
+                stage="entry",
+                detail=f"account data unavailable; candidate not evaluated: "
+                       f"{account_error}",
+                ticker=candidate.symbol)
+            result.errors += 1
+            continue
         if len(open_positions) >= rules.MAX_CONCURRENT_POSITIONS:
             log.log_signal(ticker=candidate.symbol, signal_type="entry_candidate",
                            triggered_rule="layer1_rank", action_taken="SKIPPED",
@@ -248,6 +396,23 @@ def run_session(*, broker: BrokerLike, log: StudyLog,
             result.skipped += 1
             continue
         try:
+            utc_now = (now.replace(tzinfo=dt.timezone.utc)
+                       if now.utcoffset() is None
+                       else now.astimezone(dt.timezone.utc))
+            closed_cycles = _closed_entry_cycles(
+                log, candidate.symbol, utc_now.date().isoformat())
+            client_order_id = make_client_order_id(
+                candidate.symbol, "entry", now,
+                identity=f"{action_identity}|cycle={closed_cycles}")
+            if _entry_action_already_recorded(
+                    log, open_positions, candidate.symbol, now, client_order_id):
+                log.log_signal(
+                    ticker=candidate.symbol, signal_type="entry_candidate",
+                    triggered_rule="duplicate_entry_action", action_taken="SKIPPED",
+                    notes="this entry action was already recorded")
+                result.skipped += 1
+                continue
+
             thesis = thesis_for(candidate)
             if thesis is None:
                 log.log_signal(ticker=candidate.symbol, signal_type="entry_candidate",
@@ -296,27 +461,41 @@ def run_session(*, broker: BrokerLike, log: StudyLog,
                                      f"stop {thesis.stop:.2f}; quote {quote.timestamp}")
                 result.skipped += 1
                 continue
-            fill = broker.submit(candidate.symbol, size, "buy", quote=quote)
+            fill = broker.submit(
+                candidate.symbol, size, "buy",
+                client_order_id=client_order_id,
+                quote=quote)
+            filled_qty = int(fill.qty)
+            if filled_qty <= 0 or filled_qty > size:
+                raise ValueError(
+                    f"broker returned invalid entry fill quantity {filled_qty} "
+                    f"for a {size}-share request")
             thesis_text = thesis.as_text()
 
             log.open_trade(entry_timestamp=fill.filled_at, ticker=candidate.symbol,
-                           direction="long", entry_price=fill.filled_price, size=size,
+                           direction="long", entry_price=fill.filled_price,
+                           size=filled_qty,
                            thesis_at_entry=thesis_text,
                            invalidation_condition=thesis.falsification)
             log.log_signal(ticker=candidate.symbol, signal_type="entry_candidate",
                            triggered_rule="section5_gate", action_taken="ENTERED",
                            price_at_signal=fill.filled_price,
-                           notes=f"{size} shares; stop {thesis.stop:.2f}; "
-                                 f"quote {quote.timestamp}; order {fill.order_id}")
+                           notes=f"{filled_qty} shares; stop {thesis.stop:.2f}; "
+                                 f"quote {quote.timestamp}; order {fill.order_id}; "
+                                 f"client_order_id={client_order_id}",
+                           timestamp=fill.filled_at)
 
             open_positions.append(OpenPosition(
                 ticker=candidate.symbol, direction="long",
-                entry_price=fill.filled_price, size=size, remaining=size,
+                entry_price=fill.filled_price, size=filled_qty,
+                remaining=filled_qty,
                 stop=thesis.stop, target_1=thesis.target_1, target_2=thesis.target_2,
                 entry_timestamp=fill.filled_at, thesis=thesis_text,
-                invalidation=thesis.falsification))
+                invalidation=thesis.falsification,
+                position_id=client_order_id))
             sector_weights[candidate.sector] = (
-                sector_weights.get(candidate.sector, 0.0) + prospective_weight)
+                sector_weights.get(candidate.sector, 0.0)
+                + (filled_qty * fill.filled_price / nlv if nlv else 0.0))
             open_risk += rules.RISK_PER_TRADE
             result.entered += 1
 
@@ -327,7 +506,7 @@ def run_session(*, broker: BrokerLike, log: StudyLog,
             result.errors += 1
 
     LOG.info("session complete: %s", result.summary())
-    if final_day and open_positions:
+    if final_session and open_positions:
         # Mark, do not close. Reported separately from closed trades.
         for position in open_positions:
             try:
@@ -338,7 +517,7 @@ def run_session(*, broker: BrokerLike, log: StudyLog,
                 continue
             log.log_signal(ticker=position.ticker, signal_type="end_of_window_mark",
                            triggered_rule="section5_end_of_window",
-                           action_taken="MARKED", price_at_signal=quote.bid,
+                           action_taken="SKIPPED", price_at_signal=quote.bid,
                            notes=f"open at end of window; entry {position.entry_price}; "
                                  f"remaining {position.remaining}; quote {quote.timestamp}")
 

@@ -94,7 +94,7 @@ class RiskConfig:
     # Amendment 2026-09-28. tests/test_study_rules.py pins the invariant.
     target_r_multiples: tuple[float, ...] = (2.0, 4.0)
     #: Reject any idea whose reward-to-risk is below this.
-    min_reward_risk: float = 1.5
+    min_reward_risk: float = 2.0
     #: Block new longs when the blackout flag is set (earnings, FOMC, CPI).
     news_blackout_days: int = 1
     #: Refuse to trade a symbol thinner than this (dollar volume, 20d median).

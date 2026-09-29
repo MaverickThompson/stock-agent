@@ -1,19 +1,23 @@
 name: Study session
 
-# One session per US market day for the 60-day study.
+# Attempts one live session per US market date until 60 successful sessions
+# have been recorded. Missed or closed-market attempts do not advance progress.
 #
 # WHY THERE ARE NINETEEN CRON ENTRIES AND NOT ONE
 # -----------------------------------------------
 # GitHub's scheduler does not run a cron entry at the time written. It runs it
 # when the shared runner pool has room, and the observed lateness on this repo
-# has been 3h32m, 5h00m, 6h17m and ~4h. Day 1 of the study (2026-09-23) was
+# has been 3h32m, 5h00m, 6h17m and ~4h. V1 Day 1 of the study (2026-09-23) was
 # scheduled for 14:45 UTC, fired at 21:02 UTC -- after the close -- and the
 # only thing it produced was a market_closed SYSTEM_ERROR row.
 #
-# A single scheduled time therefore cannot land inside market hours reliably.
-# Nineteen entries spread across the trading day can: whichever firing arrives
-# while the market is open does the session, and every later firing that day
-# sees the marker written below and exits after checkout, in about 20 seconds.
+# A single scheduled time therefore has a poor chance of landing inside market
+# hours. Nineteen entries spread across the trading day improve that chance:
+# whichever firing arrives while the market is open does the session, and later
+# firings that day see the marker below and exit after checkout.
+#
+# Scheduled attempts improve recovery but cannot guarantee uptime; GitHub's
+# scheduler/runners and the market-data and broker providers must be available.
 #
 # The entries run from 13:22 UTC (8 minutes before the EDT open) to 21:14 UTC
 # (14 minutes after the EST close), because the study window crosses the DST
@@ -56,10 +60,6 @@ on:
         description: "Dry run: evaluate and log, place no orders"
         type: boolean
         default: false
-      force:
-        description: "Force: run even if today's session already completed"
-        type: boolean
-        default: false
 
 concurrency:
   group: study-session
@@ -71,7 +71,7 @@ permissions:
 jobs:
   session:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 45
     steps:
       # ``ref: main`` is load-bearing, not decoration. The default checkout
       # pins to github.sha -- the tip at the moment the run was CREATED. Runs
@@ -84,29 +84,16 @@ jobs:
         with:
           ref: main
 
-      # Cheap gate, deliberately before the ~500-symbol data fetch. Eighteen of
-      # the nineteen daily firings stop here.
-      - name: Has today's session already run?
-        id: guard
-        run: |
-          today=$(date -u +%Y-%m-%d)
-          marker=study/last_session.txt
-          if [ "${{ inputs.force }}" = "true" ]; then
-            echo "forced by workflow_dispatch; running anyway"
-            echo "skip=false" >> "$GITHUB_OUTPUT"
-          elif [ -f "$marker" ] && [ "$(tr -d '[:space:]' < "$marker")" = "$today" ]; then
-            echo "session for $today already completed; nothing to do"
-            echo "skip=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "no completed session recorded for $today; running"
-            echo "skip=false" >> "$GITHUB_OUTPUT"
-          fi
-
       - uses: actions/setup-python@v6
-        if: steps.guard.outputs.skip == 'false'
         with:
           python-version: "3.12"
           cache: pip
+
+      # Cheap gate, deliberately before the ~500-symbol data fetch. Enforces
+      # the V2 start date, 60-session completion state, and daily marker.
+      - name: Has today's session already run?
+        id: guard
+        run: python scripts/check_study_eligibility.py
 
       - name: Install
         if: steps.guard.outputs.skip == 'false'
@@ -114,6 +101,14 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
           pip install -e .
+
+      - name: Wait for market open
+        id: market_open
+        if: steps.guard.outputs.skip == 'false'
+        env:
+          ALPACA_API_KEY: ${{ secrets.ALPACA_API_KEY }}
+          ALPACA_SECRET_KEY: ${{ secrets.ALPACA_SECRET_KEY }}
+        run: python scripts/wait_for_market_open.py
 
       # ``data/`` is deliberately ignored because price history cannot be
       # redistributed. A clean Actions checkout must populate it before the
@@ -124,13 +119,13 @@ jobs:
       # minimum of 200 distinct symbols per scanning session. Three is a protocol
       # breach, and a 60-day study over SPY/QQQ/BTC is a guaranteed null result.
       - name: Fetch market data
-        if: steps.guard.outputs.skip == 'false'
+        if: steps.guard.outputs.skip == 'false' && steps.market_open.outputs.ready == 'true'
         run: python scripts/fetch_data.py --sp500 --skip-existing --allow-partial
 
       # Freeze the universe on day 1 so it is auditable and cannot drift as the
       # index is rebalanced mid-study. Written once; later sessions leave it alone.
       - name: Snapshot the universe (once)
-        if: steps.guard.outputs.skip == 'false'
+        if: steps.guard.outputs.skip == 'false' && steps.market_open.outputs.ready == 'true'
         run: |
           mkdir -p study
           if [ ! -f study/universe.txt ]; then
@@ -140,15 +135,8 @@ jobs:
             echo "universe already frozen: $(wc -l < study/universe.txt) symbols"
           fi
 
-      - name: Wait for market open
-        id: market_open
-        if: steps.guard.outputs.skip == 'false'
-        env:
-          ALPACA_API_KEY: ${{ secrets.ALPACA_API_KEY }}
-          ALPACA_SECRET_KEY: ${{ secrets.ALPACA_SECRET_KEY }}
-        run: python scripts/wait_for_market_open.py
-
       - name: Run session
+        id: run_session
         if: steps.guard.outputs.skip == 'false' && steps.market_open.outputs.ready == 'true'
         env:
           ALPACA_API_KEY: ${{ secrets.ALPACA_API_KEY }}
@@ -158,9 +146,9 @@ jobs:
           STUDY_DRY_RUN: ${{ inputs.dry_run }}
         run: python scripts/run_session.py
 
-      # Committed even on failure: Section 10 requires the SYSTEM_ERROR row
-      # describing the failure to survive, and a lost log is worse than a
-      # failed session.
+      # Logs and open positions are one execution record and must be committed
+      # together even on failure. Incomplete attempts do not advance V2 state
+      # or the daily marker.
       - name: Commit the logs
         if: always() && steps.guard.outputs.skip == 'false'
         run: |
@@ -170,7 +158,12 @@ jobs:
           # cache and is gitignored, so it is never added here.
           # last_session.txt is operational scheduling state, not a study log.
           git add study/signals.csv study/trades.csv study/universe.txt \
-                  study/last_session.txt || true
+                  study/open_positions.json || true
+          if [ "${{ steps.run_session.conclusion }}" = "success" ]; then
+            git add study/v2_state.json study/last_session.txt || true
+          else
+            echo "Run session did not succeed; leaving V2 progress and marker unstaged"
+          fi
           if git diff --staged --quiet; then
             echo "no log rows this session"
           else

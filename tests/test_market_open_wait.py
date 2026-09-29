@@ -35,7 +35,7 @@ def test_wait_returns_without_sleep_when_market_is_open():
 
 def test_wait_sleeps_until_next_open_then_rechecks():
     now = dt.datetime(2026, 9, 24, 13, 20, tzinfo=dt.timezone.utc)
-    opening = now + dt.timedelta(minutes=10)
+    opening = now + dt.timedelta(minutes=8)
     slept = []
     broker = Broker([
         Clock(False, opening),
@@ -49,12 +49,27 @@ def test_wait_sleeps_until_next_open_then_rechecks():
     )
 
     assert ready is True
-    assert slept == [600.0]
+    assert slept == [480.0]
 
 
 def test_wait_skips_when_next_open_is_the_following_session():
     now = dt.datetime(2026, 9, 24, 20, 0, tzinfo=dt.timezone.utc)
     next_open = dt.datetime(2026, 9, 25, 13, 30, tzinfo=dt.timezone.utc)
+    slept = []
+
+    ready = waiter.wait_until_open(
+        Broker([Clock(False, next_open)]),
+        now_fn=lambda: now,
+        sleep_fn=slept.append,
+    )
+
+    assert ready is False
+    assert slept == []
+
+
+def test_wait_skips_when_next_open_exceeds_eight_minutes():
+    now = dt.datetime(2026, 9, 24, 13, 20, tzinfo=dt.timezone.utc)
+    next_open = now + dt.timedelta(minutes=9)
     slept = []
 
     ready = waiter.wait_until_open(

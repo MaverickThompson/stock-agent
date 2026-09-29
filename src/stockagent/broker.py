@@ -157,6 +157,56 @@ class AlpacaBroker:
         """Return Alpaca's clock, including the next regular-session open."""
         return _retry(self._trading.get_clock, "get_clock")
 
+    def calendar_sessions(
+        self, start_date: dt.date, end_date: dt.date,
+    ) -> list[dt.date]:
+        """Return Alpaca calendar session dates in the inclusive range."""
+        return [session_date for session_date, _close in
+                self.calendar_sessions_with_closes(start_date, end_date)]
+
+    def calendar_sessions_with_closes(
+        self, start_date: dt.date, end_date: dt.date,
+    ) -> list[tuple[dt.date, dt.time | None]]:
+        """Return Alpaca session dates and their actual local close times."""
+        if type(start_date) is not dt.date or type(end_date) is not dt.date:
+            raise TypeError("calendar bounds must be dates")
+        if end_date < start_date:
+            raise ValueError("calendar end_date cannot precede start_date")
+
+        from alpaca.trading.requests import GetCalendarRequest
+
+        raw_calendar = _retry(
+            lambda: self._trading.get_calendar(
+                GetCalendarRequest(start=start_date, end=end_date)),
+            "get_calendar",
+        )
+        sessions: list[tuple[dt.date, dt.time | None]] = []
+        for entry in raw_calendar:
+            session_date = entry.date
+            if isinstance(session_date, dt.datetime):
+                session_date = session_date.date()
+            elif isinstance(session_date, str):
+                session_date = dt.date.fromisoformat(session_date)
+            if type(session_date) is not dt.date:
+                raise BrokerError("Alpaca returned an invalid calendar session date")
+            raw_close = getattr(entry, "close", None)
+            if isinstance(raw_close, dt.datetime):
+                close = raw_close.timetz()
+            elif isinstance(raw_close, dt.time):
+                close = raw_close
+            elif isinstance(raw_close, str):
+                try:
+                    close = dt.time.fromisoformat(raw_close)
+                except ValueError as error:
+                    raise BrokerError(
+                        "Alpaca returned an invalid calendar session close") from error
+            elif raw_close is None:
+                close = None
+            else:
+                raise BrokerError("Alpaca returned an invalid calendar session close")
+            sessions.append((session_date, close))
+        return sessions
+
     # -- quotes -------------------------------------------------------------
 
     def quote(self, symbol: str, *, now: dt.datetime | None = None) -> Quote:
@@ -189,7 +239,7 @@ class AlpacaBroker:
     # -- orders -------------------------------------------------------------
 
     def submit(self, symbol: str, qty: int, side: str, *,
-               quote: Quote | None = None) -> Fill:
+               client_order_id: str, quote: Quote | None = None) -> Fill:
         """Submit a day market order and return the broker's own fill record.
 
         Market orders only: Section 7 models entry at the ask and exit at the
@@ -201,15 +251,44 @@ class AlpacaBroker:
 
         if qty <= 0:
             raise BrokerError(f"refusing to submit a non-positive quantity: {qty}")
+        if not isinstance(client_order_id, str) or not client_order_id:
+            raise BrokerError("client_order_id must be a non-empty string")
+        if len(client_order_id) > 48:
+            raise BrokerError("client_order_id must not exceed Alpaca's 48-character limit")
         quote = quote or self.quote(symbol)
 
         request = MarketOrderRequest(
             symbol=symbol, qty=qty,
             side=OrderSide.BUY if side.lower() in ("buy", "long") else OrderSide.SELL,
-            time_in_force=TimeInForce.DAY)
-        order = _retry(lambda: self._trading.submit_order(request),
-                       f"submit_order({side} {qty} {symbol})")
+            time_in_force=TimeInForce.DAY, client_order_id=client_order_id)
+        try:
+            order = _retry(lambda: self._trading.submit_order(request),
+                           f"submit_order({side} {qty} {symbol})")
+        except BrokerError as submission_error:
+            cause = submission_error.__cause__
+            duplicate = self._is_duplicate_client_order_id(submission_error)
+            ambiguous = cause is not None and _is_transient(cause)
+            if not duplicate and not ambiguous:
+                raise
+            try:
+                order = _retry(
+                    lambda: self._trading.get_order_by_client_id(client_order_id),
+                    f"get_order_by_client_id({client_order_id})")
+            except Exception:
+                raise submission_error
+            if order is None:
+                raise submission_error
         settled = self._await_fill(str(order.id))
+
+        filled_qty = int(float(getattr(settled, "filled_qty", 0) or 0))
+        if filled_qty <= 0:
+            status = getattr(settled, "status", "unknown")
+            raise BrokerError(
+                f"order {order.id} reached {status} with zero filled shares")
+        if filled_qty > qty:
+            raise BrokerError(
+                f"order {order.id} reports {filled_qty} filled shares for a "
+                f"{qty}-share request")
 
         filled_price = float(settled.filled_avg_price or 0.0)
         if filled_price <= 0:
@@ -220,11 +299,22 @@ class AlpacaBroker:
                         "ask" if side.lower() in ("buy", "long") else "bid")
 
         filled_at = getattr(settled, "filled_at", None)
-        return Fill(order_id=str(order.id), symbol=symbol, side=side.lower(), qty=qty,
+        return Fill(order_id=str(order.id), symbol=symbol, side=side.lower(),
+                    qty=filled_qty,
                     filled_price=filled_price,
                     filled_at=(filled_at.strftime("%Y-%m-%dT%H:%M:%SZ")
                                if filled_at else quote.timestamp),
                     quote_at_decision=quote)
+
+    @staticmethod
+    def _is_duplicate_client_order_id(error: Exception) -> bool:
+        message = str(error).lower().replace("-", "_")
+        return any(phrase in message for phrase in (
+            "client_order_id must be unique",
+            "client_order_id already exists",
+            "duplicate client_order_id",
+            "duplicate client order id",
+        ))
 
     def _await_fill(self, order_id: str, *, timeout: float = 30.0) -> Any:
         """Poll until the order is terminal. Paper market orders settle quickly."""
@@ -232,12 +322,14 @@ class AlpacaBroker:
         order = _retry(lambda: self._trading.get_order_by_id(order_id),
                        f"get_order({order_id})")
         while time.monotonic() < deadline:
-            status = str(getattr(order, "status", "")).lower()
-            if "filled" in status or "canceled" in status or "rejected" in status:
+            raw_status = getattr(order, "status", "")
+            status = str(getattr(raw_status, "value", raw_status)).lower()
+            if status in {"filled", "canceled", "cancelled", "rejected",
+                          "expired", "done_for_day", "replaced"}:
                 return order
             time.sleep(1.0)
             order = _retry(lambda: self._trading.get_order_by_id(order_id),
                            f"get_order({order_id})")
-        LOG.warning("order %s still open after %.0fs; recording its current state",
+        LOG.warning("order %s still pending after %.0fs",
                     order_id, timeout)
-        return order
+        raise BrokerError(f"order {order_id} still pending after {timeout:.0f}s")

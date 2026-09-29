@@ -35,6 +35,14 @@ def test_worked_example_from_the_docs(portfolio: Portfolio) -> None:
     # amendment altered only where the targets sit, nothing about risk.
     assert result.targets[0] == pytest.approx(809.02, abs=0.02)   # 773.26 + 2.0 x 17.88
     assert result.targets[1] == pytest.approx(844.78, abs=0.02)   # 773.26 + 4.0 x 17.88
+    assert (result.targets[0] - 773.26) / (773.26 - result.stop) == pytest.approx(2.0)
+
+
+def test_risk_agent_floor_matches_section_5() -> None:
+    """The agent must enforce the same Target 1 minimum as the study rules."""
+    from stockagent.study_rules import MIN_REWARD_TO_RISK
+
+    assert RiskConfig().min_reward_risk == MIN_REWARD_TO_RISK
 
 
 def test_risk_never_exceeds_one_percent(portfolio: Portfolio) -> None:
