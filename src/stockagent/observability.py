@@ -51,15 +51,28 @@ def init_sentry(*, environment: str = "study", release: str | None = None) -> bo
                     "this session is running with NO error alerting")
         return False
 
-    sentry_sdk.init(
-        dsn=dsn,
-        environment=environment,
-        release=release,
-        send_default_pii=False,
-        enable_logs=True,
-        traces_sample_rate=0.0,
-        profiles_sample_rate=0.0,
-    )
+    try:
+        sentry_sdk.init(
+            dsn=dsn,
+            environment=environment,
+            release=release,
+            send_default_pii=False,
+            enable_logs=True,
+            traces_sample_rate=0.0,
+            profiles_sample_rate=0.0,
+        )
+    except Exception as exc:  # noqa: BLE001 - alerting must never kill a session
+        # A malformed DSN raises BadDsn here. init_sentry is the first call in
+        # run_session.main(), so letting that propagate would end the session
+        # before any trading logic ran -- a typo in one repository secret would
+        # cost a study day and look like an unexplained missing session.
+        # Reporting being off is a disclosable gap; a dead session is worse.
+        LOG.warning(
+            "SENTRY_DSN is set but Sentry could not start (%s: %s) - "
+            "this session is running with NO error alerting",
+            type(exc).__name__, exc)
+        return False
+
     LOG.info("sentry initialised (environment=%s)", environment)
     return True
 

@@ -32,3 +32,10 @@ htmlcov/
 # two logs -- signals.csv and trades.csv -- and a 4,200-line calendar recommitted
 # every session would bury them in the history.
 study/earnings_calendar.csv
+
+# Local virtualenv (PyCharm)
+.venv/
+venv/
+
+# Local Sentry wiring check, not part of the study
+sentry_test.py
