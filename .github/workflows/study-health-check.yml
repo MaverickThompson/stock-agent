@@ -34,4 +34,5 @@ jobs:
         env:
           ALPACA_API_KEY: ${{ secrets.ALPACA_API_KEY }}
           ALPACA_SECRET_KEY: ${{ secrets.ALPACA_SECRET_KEY }}
+          SENTRY_DSN: ${{ secrets.SENTRY_DSN }}
         run: python scripts/check_study_health.py

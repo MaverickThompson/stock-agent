@@ -17,6 +17,37 @@ DEFAULT_STATE_PATH = ROOT / "study" / "v2_state.json"
 DEFAULT_MARKER_PATH = ROOT / "study" / "last_session.txt"
 
 
+class StudyHealthAlert(RuntimeError):
+    """Carries a watchdog finding into Sentry as its own issue group.
+
+    A missed session is *silence* -- no exception is raised anywhere, so
+    nothing would otherwise reach Sentry. Sentry catches crashes; the two
+    failures this study has actually suffered (a cron firing 5h16m late, and
+    a state file reading 0 while two positions were open) were both silent.
+    This class is what turns absence into an event.
+    """
+
+
+def _alert(message: str, *, stage: str) -> None:
+    """Report a watchdog finding to Sentry if a DSN is configured.
+
+    Deliberately swallows everything: the watchdog's exit code is the
+    contract with CI, and a failure to *report* a missed session must never
+    change whether that session is recorded as missed.
+    """
+    try:
+        from stockagent import observability
+        if not observability.init_sentry(environment="watchdog"):
+            return
+        try:
+            raise StudyHealthAlert(message)
+        except StudyHealthAlert as exc:
+            observability.report(exc, stage=stage)
+        observability.flush()
+    except Exception:  # noqa: BLE001 - alerting must not affect the verdict
+        pass
+
+
 def _write_summary(summary_path: pathlib.Path | str, text: str) -> None:
     if str(summary_path) == "-":
         print(text)
@@ -147,6 +178,10 @@ def main() -> int:
             "whether a market session was missed."
         )
         _write_summary(summary_path, message)
+        _alert(
+            f"Study health check could not verify {market_date.isoformat()}: "
+            f"{type(error).__name__}: {error}",
+            stage="study_health_unverifiable")
         if summary_path != "-":
             print(f"Study health verification failed for {market_date}: {error}",
                   file=sys.stderr)
@@ -156,6 +191,13 @@ def main() -> int:
         state, market_date, calendar_sessions, summary_path,
         session_close=session_close,
         now=now)
+    if not healthy:
+        _alert(
+            f"V2 study missed the Alpaca market session on "
+            f"{market_date.isoformat()} (completed_sessions="
+            f"{state.completed_sessions}, last_session_date="
+            f"{state.last_session_date})",
+            stage="study_health_missed_session")
     if summary_path != "-":
         print(
             "Study health: healthy" if healthy else
