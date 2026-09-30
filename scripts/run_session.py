@@ -76,6 +76,27 @@ def main() -> int:
         observability.flush()
         return 0
 
+    # Section 11 instrumentation, 2026-09-30: name the rules that are about
+    # to run, before they run. "Which version ran?" was previously only
+    # answerable by comparing the spacing of two logged target prices.
+    try:
+        import subprocess
+        from stockagent.conformance import record_session_provenance
+        from stockagent.config import Config as _Config
+        _sha = os.environ.get("GITHUB_SHA", "")
+        if not _sha:
+            _sha = subprocess.run(["git", "rev-parse", "--short", "HEAD"],
+                                  capture_output=True, text=True,
+                                  cwd=str(ROOT)).stdout.strip()
+        record_session_provenance(
+            STUDY_DIR, cfg=_Config(),
+            timestamp=dt.datetime.now(dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+            completed_sessions=study_state.completed_sessions,
+            git_sha=_sha[:12])
+    except Exception as exc:  # noqa: BLE001 - provenance must never block a session
+        log.log_system_error(stage="provenance",
+                             detail=f"{type(exc).__name__}: {exc}")
+
     positions = load_open_positions()
     dry_run = os.environ.get("STUDY_DRY_RUN", "").strip().lower() in {
         "1", "true", "yes", "on"

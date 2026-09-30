@@ -36,6 +36,11 @@ name: Study session
 on:
   schedule:
     - cron: "22 13 * * 1-5"
+    - cron: "26 13 * * 1-5"
+    - cron: "31 13 * * 1-5"
+    - cron: "35 13 * * 1-5"
+    - cron: "39 13 * * 1-5"
+    - cron: "43 13 * * 1-5"
     - cron: "48 13 * * 1-5"
     - cron: "14 14 * * 1-5"
     - cron: "41 14 * * 1-5"
@@ -160,7 +165,7 @@ jobs:
           git add study/signals.csv study/trades.csv study/universe.txt \
                   study/open_positions.json || true
           if [ "${{ steps.run_session.conclusion }}" = "success" ]; then
-            git add study/v2_state.json study/last_session.txt || true
+            git add study/v2_state.json study/last_session.txt study/sessions.csv || true
           else
             echo "Run session did not succeed; leaving V2 progress and marker unstaged"
           fi

@@ -29,6 +29,7 @@ import hashlib
 from typing import Any, Callable, Protocol, Sequence
 
 from . import study_rules as rules
+from .conformance import check_conformance
 from .study_log import StudyLog, utc_now_iso
 from .study_state import V2_SESSION_TARGET
 
@@ -258,6 +259,7 @@ def run_session(*, broker: BrokerLike, log: StudyLog,
                 falsified: Callable[[OpenPosition], bool] | None = None,
                 dry_run: bool = False,
                 completed_sessions: int = 0,
+                cfg: Any | None = None,
                 ) -> SessionResult:
     """Execute one session. Never raises for a per-symbol failure -- it logs.
 
@@ -303,6 +305,28 @@ def run_session(*, broker: BrokerLike, log: StudyLog,
         return result
 
     result.ran = True
+
+    # ---- Section 11 conformance check -----------------------------------
+    # Three places in this codebase encode the reward-to-risk relationship.
+    # In v1 they disagreed and the entry gate could never be satisfied, and
+    # nothing said so. Entries are refused under any configuration that is
+    # not the recorded mapping; exits still run, because abandoning stops on
+    # open positions would be the worse failure.
+    if cfg is None:
+        try:
+            from .config import Config
+            cfg = Config()
+        except Exception:  # noqa: BLE001 - never block a session on this
+            cfg = None
+    entries_allowed = True
+    if cfg is not None:
+        mismatch = check_conformance(cfg)
+        if mismatch:
+            log.log_system_error(
+                stage="config_conformance", detail=mismatch,
+                timestamp=now.strftime("%Y-%m-%dT%H:%M:%SZ"))
+            result.errors += 1
+            entries_allowed = False
 
     # -- 1. exits before entries -------------------------------------------
     for position in list(open_positions):
@@ -381,6 +405,14 @@ def run_session(*, broker: BrokerLike, log: StudyLog,
 
     candidate_action_ids = _candidate_action_identities(candidates)
     for candidate, action_identity in zip(candidates, candidate_action_ids):
+        if not entries_allowed:
+            log.log_signal(ticker=candidate.symbol, signal_type="entry_candidate",
+                           triggered_rule="config_conformance",
+                           action_taken="SKIPPED",
+                           notes="configuration is not the recorded study "
+                                 "version; no entry evaluated")
+            result.skipped += 1
+            continue
         if account is None:
             log.log_system_error(
                 stage="entry",
