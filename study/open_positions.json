@@ -1,1 +1,18 @@
-[]
+[
+  {
+    "direction": "long",
+    "entry_price": 78.79,
+    "entry_timestamp": "2026-09-30T14:08:42Z",
+    "invalidation": "Enter no higher than 79.29 (0.5% slippage cap); Stop at 73.62 placed at entry, not mentally; First target 89.46 (2.00R); Maximum loss 1000.00 = 1.00% of equity; Falsification trigger -- the thesis is wrong if any of these occur: a close below 73.62 (2x ATR under entry); OR a close below the 50-day EMA at 76.88; OR the HMM posterior for Bull/Recovery dropping under 40%; OR VIX closing above 30; Standing caveat (model): Model diagnostic: no state resembles Bear. The training window contains no such regime, so this model cannot ever signal one -- treat its silence about Bear as absence of evidence, not evidence of absence; Standing caveat (model): Model diagnostic: no state resembles Recovery. The training window contains no such regime, so this model cannot ever signal one -- treat its silence about Recovery as absence of evidence, not evidence of absence; Standing caveat (model): The model is structurally blind here: no state resembles Bear. The training window contains no such regime, so this model cannot ever signal one -- treat its silence about Bear as absence of evidence, not evidence of absence; Standing caveat (model): The model is structurally blind here: no state resembles Recovery. The training window contains no such regime, so this model cannot ever signal one -- treat its silence about Recovery as absence of evidence, not evidence of absence; Standing caveat (model): Baum-Welch restarts disagree by 200 nats. The fit is one of several very different local optima, so the regime map is not a stable object",
+    "position_id": "v2-20260930-acceb5221fd4974dfa73caaf4b6ebb3c",
+    "remaining": 193,
+    "size": 193,
+    "stop": 73.62051320017203,
+    "target_1": 89.459,
+    "target_1_filled": 0,
+    "target_1_hit": false,
+    "target_2": 100.018,
+    "thesis": "entry 78.37-79.43, stop 73.62, T1 89.46, T2 100.02, p=0.49; ATR(2.0x) stop, fixed-fractional sizing",
+    "ticker": "MCHP"
+  }
+]

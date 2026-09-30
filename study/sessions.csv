@@ -1,0 +1,2 @@
+timestamp,study_version,config_fingerprint,target_r_multiples,min_reward_risk_cfg,min_reward_risk_rules,git_sha,completed_sessions_before,conformance
+2026-09-30T14:05:00Z,v2,0c1fc0a6d5c4,2/4,2.0,2.0,756c7f15fbe8,1,OK
