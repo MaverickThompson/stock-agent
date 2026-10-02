@@ -103,3 +103,23 @@ timestamp,ticker,signal_type,triggered_rule,action_taken,reason_if_rejected,pric
 2026-10-01T19:06:47Z,TXN,entry_candidate,section5_gate,REJECTED,p 0.328 below breakeven+10pp (0.421),282.86,quote 2026-10-01T19:06:46Z
 2026-10-01T19:07:04Z,MU,entry_candidate,section5_gate,REJECTED,R:R 1.91 below the 2.0 floor,1094.33,quote 2026-10-01T19:07:00Z
 2026-10-01T19:07:22Z,ROK,entry_candidate,section5_gate,REJECTED,R:R 1.78 below the 2.0 floor,438.75,quote 2026-10-01T19:07:05Z
+2026-10-02T18:34:35Z,CIEN,entry_candidate,layer2_debate,REJECTED,layer 2 produced no thesis,,
+2026-10-02T18:34:59Z,WDC,entry_candidate,layer2_debate,REJECTED,layer 2 produced no thesis,,
+2026-10-02T18:35:23Z,COHR,entry_candidate,layer2_debate,REJECTED,layer 2 produced no thesis,,
+2026-10-02T18:35:47Z,ON,entry_candidate,section5_gate,REJECTED,R:R 1.98 below the 2.0 floor,83.44,quote 2026-10-02T18:35:47Z
+2026-10-02T18:36:10Z,MPWR,entry_candidate,section5_gate,REJECTED,ask 1508.03 outside recorded entry zone 1421.90-1443.76,1508.03,quote 2026-10-02T18:36:10Z
+2026-10-02T18:36:37Z,FLEX,entry_candidate,layer2_debate,REJECTED,layer 2 produced no thesis,,
+2026-10-02T18:36:51Z,GEV,entry_candidate,section5_gate,REJECTED,R:R 1.87 below the 2.0 floor,992.09,quote 2026-10-02T18:36:36Z
+2026-10-02T18:37:17Z,DAL,entry_candidate,section5_gate,REJECTED,R:R 1.97 below the 2.0 floor,83.8,quote 2026-10-02T18:37:13Z
+2026-10-02T18:37:38Z,FIX,entry_candidate,section5_gate,REJECTED,R:R 1.94 below the 2.0 floor,1743.78,quote 2026-10-02T18:37:35Z
+2026-10-02T18:38:00Z,GLW,entry_candidate,section5_gate,REJECTED,stop 147.50 is a round number (Section 5),165,quote 2026-10-02T18:37:53Z
+2026-10-02T18:38:27Z,CAT,entry_candidate,section5_gate,REJECTED,ask 859.40 outside recorded entry zone 843.13-852.45,859.4,quote 2026-10-02T18:38:09Z
+2026-10-02T18:38:56Z,EXPD,entry_candidate,section5_gate,REJECTED,R:R 1.92 below the 2.0 floor,191.55,quote 2026-10-02T18:38:49Z
+2026-10-02T18:39:19Z,STX,entry_candidate,layer2_debate,REJECTED,layer 2 produced no thesis,,
+2026-10-02T18:39:50Z,LUV,entry_candidate,section5_gate,REJECTED,R:R 1.96 below the 2.0 floor,42.24,quote 2026-10-02T18:39:48Z
+2026-10-02T18:40:13Z,NVDA,entry_candidate,section5_gate,REJECTED,R:R 2.00 below the 2.0 floor,234.4,quote 2026-10-02T18:40:13Z
+2026-10-02T18:40:38Z,SMCI,entry_candidate,section5_gate,REJECTED,p 0.326 below breakeven+10pp (0.429),43.57,quote 2026-10-02T18:40:38Z
+2026-10-02T18:41:02Z,CSCO,entry_candidate,section5_gate,REJECTED,"cash would fall to 7.3%, below the 10% reserve",111.9,quote 2026-10-02T18:41:01Z
+2026-10-02T18:41:26Z,KLAC,entry_candidate,layer2_debate,REJECTED,layer 2 produced no thesis,,
+2026-10-02T18:41:44Z,HPE,entry_candidate,layer2_debate,REJECTED,layer 2 produced no thesis,,
+2026-10-02T18:42:09Z,MCHP,entry_candidate,section5_gate,REJECTED,R:R 1.95 below the 2.0 floor,81.64,quote 2026-10-02T18:42:09Z
