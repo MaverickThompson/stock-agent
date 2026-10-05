@@ -107,6 +107,18 @@ jobs:
           pip install -r requirements.txt
           pip install -e .
 
+      - name: Record the resolved dependency set
+        # requirements.txt pins FLOORS, not exact versions, so CI resolves the
+        # latest compatible release on every run. Over a 60-session study that
+        # means the environment can drift underneath the protocol without any
+        # code change. This records exactly what ran, each day, so drift is
+        # detectable after the fact instead of being invisible. Purely
+        # observational -- it changes no decision parameter.
+        run: |
+          mkdir -p study/env
+          python -m pip freeze > "study/env/$(date -u +%Y-%m-%d).txt"
+          python -c "import sys; print('python', sys.version.split()[0])" >> "study/env/$(date -u +%Y-%m-%d).txt"
+
       - name: Wait for market open
         id: market_open
         if: steps.guard.outputs.skip == 'false'
@@ -163,7 +175,7 @@ jobs:
           # cache and is gitignored, so it is never added here.
           # last_session.txt is operational scheduling state, not a study log.
           git add study/signals.csv study/trades.csv study/universe.txt \
-                  study/open_positions.json || true
+                  study/open_positions.json study/env || true
           if [ "${{ steps.run_session.conclusion }}" = "success" ]; then
             git add study/v2_state.json study/last_session.txt study/sessions.csv || true
           else
