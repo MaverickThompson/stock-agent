@@ -9,7 +9,7 @@ cycler==0.12.1
 fonttools==4.66.1
 hmmlearn==0.3.3
 idna==3.20
-iniconfig==2.3.0
+iniconfig==2.3.1
 joblib==1.6.0
 kiwisolver==1.5.1
 matplotlib==3.11.2
@@ -34,10 +34,10 @@ scipy==1.18.1
 sentry-sdk==2.71.0
 six==1.17.0
 sseclient-py==1.9.0
--e git+https://github.com/MaverickThompson/stock-agent@67c4523422b9cb1cfdfb22556e53506720b71438#egg=stockagent
+-e git+https://github.com/MaverickThompson/stock-agent@72ceb0f3a511a6c4d5da146699a1eaa8a0fc8edc#egg=stockagent
 threadpoolctl==3.7.0
 typing-inspection==0.4.4
 typing_extensions==4.16.0
 urllib3==2.8.0
 websockets==17.2
-python 3.12.15
+python 3.12.14
