@@ -34,7 +34,7 @@ scipy==1.18.1
 sentry-sdk==2.71.0
 six==1.17.0
 sseclient-py==1.9.0
--e git+https://github.com/MaverickThompson/stock-agent@99d316004dfb7b76a61bcb9d8d82aab690dd955e#egg=stockagent
+-e git+https://github.com/MaverickThompson/stock-agent@5e93654cdb66a8bdf5c18fd89780aa460538a059#egg=stockagent
 threadpoolctl==3.7.0
 typing-inspection==0.4.4
 typing_extensions==4.16.0
