@@ -46,5 +46,37 @@
     "target_2": 1775.2555,
     "thesis": "entry 1353.47-1374.05, stop 1260.89, T1 1569.51, T2 1775.26, p=0.48; ATR(2.0x) stop, fixed-fractional sizing",
     "ticker": "MPWR"
+  },
+  {
+    "direction": "long",
+    "entry_price": 169.72,
+    "entry_timestamp": "2026-10-06T18:11:56Z",
+    "invalidation": "Enter no higher than 171.09 (0.5% slippage cap); Stop at 153.84 placed at entry, not mentally; First target 203.03 (2.00R); Maximum loss 1000.00 = 1.00% of equity; Falsification trigger -- the thesis is wrong if any of these occur: a close below 153.84 (2x ATR under entry); OR a close below the 50-day EMA at 158.42; OR the HMM posterior for Bull/Recovery dropping under 40%; OR VIX closing above 30; Recovery regime: half the sized position, or wait for Bull; Standing caveat (model): Model diagnostic: no state resembles Bear. The training window contains no such regime, so this model cannot ever signal one -- treat its silence about Bear as absence of evidence, not evidence of absence; Standing caveat (model): Model diagnostic: no state resembles HighVolatility. The training window contains no such regime, so this model cannot ever signal one -- treat its silence about HighVolatility as absence of evidence, not evidence of absence; Standing caveat (model): The model is structurally blind here: no state resembles Bear. The training window contains no such regime, so this model cannot ever signal one -- treat its silence about Bear as absence of evidence, not evidence of absence; Standing caveat (model): The model is structurally blind here: no state resembles HighVolatility. The training window contains no such regime, so this model cannot ever signal one -- treat its silence about HighVolatility as absence of evidence, not evidence of absence; Standing caveat (model): Baum-Welch restarts disagree by 512 nats. The fit is one of several very different local optima, so the regime map is not a stable object",
+    "position_id": "v2-20261006-368979336f6464e5ac68df798f6d26f8",
+    "remaining": 64,
+    "size": 64,
+    "stop": 153.84415221991992,
+    "target_1": 203.0317,
+    "target_1_filled": 0,
+    "target_1_hit": false,
+    "target_2": 235.8234,
+    "thesis": "entry 168.60-171.88, stop 153.84, T1 203.03, T2 235.82, p=0.44; ATR(2.0x) stop, fixed-fractional sizing",
+    "ticker": "GLW"
+  },
+  {
+    "direction": "long",
+    "entry_price": 379.34,
+    "entry_timestamp": "2026-10-06T18:13:35Z",
+    "invalidation": "Enter no higher than 381.50 (0.5% slippage cap); Stop at 357.09 placed at entry, not mentally; First target 424.63 (2.00R); Maximum loss 1000.00 = 1.00% of equity; Falsification trigger -- the thesis is wrong if any of these occur: a close below 357.09 (2x ATR under entry); OR a close below the 50-day EMA at 367.02; OR the HMM posterior for Bull/Recovery dropping under 40%; OR VIX closing above 30; Standing caveat (model): Model diagnostic: no state resembles Bear. The training window contains no such regime, so this model cannot ever signal one -- treat its silence about Bear as absence of evidence, not evidence of absence; Standing caveat (model): Model diagnostic: no state resembles Sideways. The training window contains no such regime, so this model cannot ever signal one -- treat its silence about Sideways as absence of evidence, not evidence of absence; Standing caveat (model): Model diagnostic: no state resembles HighVolatility. The training window contains no such regime, so this model cannot ever signal one -- treat its silence about HighVolatility as absence of evidence, not evidence of absence; Standing caveat (model): The model is structurally blind here: no state resembles Bear. The training window contains no such regime, so this model cannot ever signal one -- treat its silence about Bear as absence of evidence, not evidence of absence; Standing caveat (model): The model is structurally blind here: no state resembles Sideways. The training window contains no such regime, so this model cannot ever signal one -- treat its silence about Sideways as absence of evidence, not evidence of absence; Standing caveat (model): The model is structurally blind here: no state resembles HighVolatility. The training window contains no such regime, so this model cannot ever signal one -- treat its silence about HighVolatility as absence of evidence, not evidence of absence; Standing caveat (model): Baum-Welch restarts disagree by 377 nats. The fit is one of several very different local optima, so the regime map is not a stable object",
+    "position_id": "v2-20261006-6f8a3dcd21f2c6e28a6158a9178438a2",
+    "remaining": 46,
+    "size": 46,
+    "stop": 357.09125051692274,
+    "target_1": 424.6325,
+    "target_1_filled": 0,
+    "target_1_hit": false,
+    "target_2": 469.6601,
+    "thesis": "entry 377.35-381.86, stop 357.09, T1 424.63, T2 469.66, p=0.50; ATR(2.0x) stop, fixed-fractional sizing",
+    "ticker": "AVGO"
   }
 ]

@@ -123,3 +123,23 @@ timestamp,ticker,signal_type,triggered_rule,action_taken,reason_if_rejected,pric
 2026-10-02T18:41:26Z,KLAC,entry_candidate,layer2_debate,REJECTED,layer 2 produced no thesis,,
 2026-10-02T18:41:44Z,HPE,entry_candidate,layer2_debate,REJECTED,layer 2 produced no thesis,,
 2026-10-02T18:42:09Z,MCHP,entry_candidate,section5_gate,REJECTED,R:R 1.95 below the 2.0 floor,81.64,quote 2026-10-02T18:42:09Z
+2026-10-06T18:09:12Z,CIEN,entry_candidate,layer2_debate,REJECTED,layer 2 produced no thesis,,
+2026-10-06T18:09:46Z,MRVL,entry_candidate,section5_gate,REJECTED,R:R 1.86 below the 2.0 floor,290.06,quote 2026-10-06T18:09:44Z
+2026-10-06T18:10:18Z,WBD,system,entry,SYSTEM_ERROR,"StaleQuote: WBD: quote 76422s old, limit 90s - fill deferred to the next regular session per Section 7",,logged per Section 10
+2026-10-06T18:10:50Z,COHR,entry_candidate,layer2_debate,REJECTED,layer 2 produced no thesis,,
+2026-10-06T18:11:25Z,FIX,entry_candidate,layer2_debate,REJECTED,layer 2 produced no thesis,,
+2026-10-06T18:11:56Z,GLW,entry_candidate,section5_gate,ENTERED,,169.72,64 shares; stop 153.84; quote 2026-10-06T18:11:55Z; order 474100c5-6fc7-45a9-b123-462ba9eac27b; client_order_id=v2-20261006-368979336f6464e5ac68df798f6d26f8
+2026-10-06T18:12:32Z,DAL,entry_candidate,section5_gate,REJECTED,R:R 1.96 below the 2.0 floor,83.32,quote 2026-10-06T18:12:27Z
+2026-10-06T18:13:07Z,FLEX,entry_candidate,layer2_debate,REJECTED,layer 2 produced no thesis,,
+2026-10-06T18:13:35Z,AVGO,entry_candidate,section5_gate,ENTERED,,379.34,46 shares; stop 357.09; quote 2026-10-06T18:13:31Z; order 596e28f4-8d6a-4f74-accd-1b5f344b02ce; client_order_id=v2-20261006-6f8a3dcd21f2c6e28a6158a9178438a2
+2026-10-06T18:13:53Z,GEV,entry_candidate,section5_gate,REJECTED,sector weight 41.7% exceeds 40%,1041.55,quote 2026-10-06T18:13:45Z
+2026-10-06T18:14:26Z,WDC,entry_candidate,layer2_debate,REJECTED,layer 2 produced no thesis,,
+2026-10-06T18:14:59Z,CRL,entry_candidate,section5_gate,REJECTED,R:R 1.94 below the 2.0 floor,307.06,quote 2026-10-06T18:14:52Z
+2026-10-06T18:15:32Z,ILMN,entry_candidate,layer2_debate,REJECTED,layer 2 produced no thesis,,
+2026-10-06T18:16:03Z,KLAC,entry_candidate,layer2_debate,REJECTED,layer 2 produced no thesis,,
+2026-10-06T18:16:36Z,LRCX,entry_candidate,section5_gate,REJECTED,p 0.334 below breakeven+10pp (0.425),332.68,quote 2026-10-06T18:16:33Z
+2026-10-06T18:17:04Z,STLD,entry_candidate,section5_gate,REJECTED,ask 252.26 outside recorded entry zone 238.36-241.50,252.26,quote 2026-10-06T18:16:35Z
+2026-10-06T18:17:35Z,CAT,entry_candidate,section5_gate,REJECTED,ask 880.00 outside recorded entry zone 859.90-869.71,880,quote 2026-10-06T18:17:20Z
+2026-10-06T18:18:06Z,TT,entry_candidate,section5_gate,REJECTED,R:R 1.97 below the 2.0 floor,478.17,quote 2026-10-06T18:18:02Z
+2026-10-06T18:18:37Z,HUM,entry_candidate,section5_gate,REJECTED,R:R 1.91 below the 2.0 floor,400.92,quote 2026-10-06T18:18:24Z
+2026-10-06T18:19:10Z,AMAT,entry_candidate,section5_gate,REJECTED,ask 535.74 outside recorded entry zone 528.08-535.63,535.74,quote 2026-10-06T18:19:09Z
