@@ -223,3 +223,23 @@ timestamp,ticker,signal_type,triggered_rule,action_taken,reason_if_rejected,pric
 2026-10-06T20:05:10Z,CSCO,system,entry,SYSTEM_ERROR,"StaleQuote: CSCO: no two-sided market (bid=112.41, ask=0.0)",,logged per Section 10
 2026-10-06T20:05:37Z,PWR,system,entry,SYSTEM_ERROR,"StaleQuote: PWR: quote 337s old, limit 90s - fill deferred to the next regular session per Section 7",,logged per Section 10
 2026-10-06T20:06:10Z,JCI,system,entry,SYSTEM_ERROR,"StaleQuote: JCI: quote 367s old, limit 90s - fill deferred to the next regular session per Section 7",,logged per Section 10
+2026-10-07T13:42:01Z,ON,entry_candidate,layer2_debate,REJECTED,layer 2 produced no thesis,,
+2026-10-07T13:42:25Z,COHR,entry_candidate,layer2_debate,REJECTED,layer 2 produced no thesis,,
+2026-10-07T13:42:55Z,FLEX,entry_candidate,section5_gate,REJECTED,ask 126.00 outside recorded entry zone 117.33-119.43,126,quote 2026-10-07T13:42:39Z
+2026-10-07T13:43:19Z,CIEN,entry_candidate,layer2_debate,REJECTED,layer 2 produced no thesis,,
+2026-10-07T13:43:43Z,FIX,entry_candidate,layer2_debate,REJECTED,layer 2 produced no thesis,,
+2026-10-07T13:44:12Z,AMAT,entry_candidate,section5_gate,REJECTED,ask 544.60 outside recorded entry zone 514.63-522.10,544.6,quote 2026-10-07T13:44:07Z
+2026-10-07T13:44:40Z,LRCX,entry_candidate,section5_gate,REJECTED,R:R 1.77 below the 2.0 floor,324.66,quote 2026-10-07T13:44:35Z
+2026-10-07T13:45:10Z,TXN,entry_candidate,section5_gate,REJECTED,p 0.363 below breakeven+10pp (0.420),288.49,quote 2026-10-07T13:45:09Z
+2026-10-07T13:45:38Z,CAT,entry_candidate,layer2_debate,REJECTED,layer 2 produced no thesis,,
+2026-10-07T13:46:03Z,KLAC,entry_candidate,layer2_debate,REJECTED,layer 2 produced no thesis,,
+2026-10-07T13:46:28Z,GLW,entry_candidate,layer2_debate,REJECTED,layer 2 produced no thesis,,
+2026-10-07T13:46:57Z,CSCO,entry_candidate,layer2_debate,REJECTED,layer 2 produced no thesis,,
+2026-10-07T13:47:27Z,CNC,entry_candidate,section5_gate,REJECTED,ask 68.12 outside recorded entry zone 64.49-65.29,68.12,quote 2026-10-07T13:47:17Z
+2026-10-07T13:47:42Z,GEV,entry_candidate,section5_gate,REJECTED,"cash would fall to -12.8%, below the 10% reserve",1000.96,quote 2026-10-07T13:47:39Z
+2026-10-07T13:48:07Z,TER,entry_candidate,layer2_debate,REJECTED,layer 2 produced no thesis,,
+2026-10-07T13:48:34Z,ADI,entry_candidate,section5_gate,REJECTED,ask 433.65 outside recorded entry zone 409.23-413.53,433.65,quote 2026-10-07T13:48:32Z
+2026-10-07T13:48:58Z,PWR,entry_candidate,section5_gate,REJECTED,ask 750.75 outside recorded entry zone 702.24-711.19,750.75,quote 2026-10-07T13:48:58Z
+2026-10-07T13:49:23Z,VRSN,entry_candidate,section5_gate,REJECTED,ask 299.41 outside recorded entry zone 294.60-297.36,299.41,quote 2026-10-07T13:49:14Z
+2026-10-07T13:49:52Z,HST,entry_candidate,section5_gate,REJECTED,p 0.319 below breakeven+10pp (0.427),22.6,quote 2026-10-07T13:49:51Z
+2026-10-07T13:50:16Z,IEX,entry_candidate,section5_gate,REJECTED,ask 248.62 outside recorded entry zone 234.06-235.88,248.62,quote 2026-10-07T13:50:06Z
