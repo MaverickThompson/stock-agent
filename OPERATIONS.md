@@ -8,6 +8,114 @@ making it perform better. See "The line you do not cross" at the bottom.
 
 ---
 
+## PART 0 — Scheduler reliability (read this first)
+
+### What happened on 2026-10-05
+
+Not one of the 24 cron entries in `study-session.yml` fired. Zero workflow
+runs existed between `2026-10-03T01:18Z` and the 4:00pm ET close, on a normal
+trading Monday. The day is gone and cannot be recovered.
+
+GitHub's own status page, read the same afternoon:
+
+| When | What GitHub reported |
+|---|---|
+| 2026-10-01 14:47Z - 17:56Z | "Actions Job Delays" |
+| 2026-10-05 19:11Z | "Incident with Actions", Actions = degraded_performance |
+
+Those windows match the damage exactly. The 2026-10-01 session fired at
+19:00Z, 5h30m after the open, inside GitHub's delay window. 2026-10-02 fired
+5h03m late, on the backlog that followed. 2026-10-05 fired not at all.
+
+### Why 24 cron entries did not save it
+
+GitHub documents `schedule` as **best effort**. A scheduled event is delayed
+when the runner pool is busy and **dropped outright** when the backlog is long
+enough. Dropping is silent: no run, no failure, no email, nothing in the
+Actions tab to click. Twenty-four entries hedge against *some* being dropped.
+They are worthless when the scheduler stops delivering for the repository at
+all, which is what a platform incident does.
+
+The scoreboard so far: **4 damaged days out of 9 attempted.** 2026-09-23 fired
+after the close, 2026-10-01 5h30m late, 2026-10-02 5h03m late, 2026-10-05
+missed. For a study that will be submitted to UROP, that is a methodology
+problem, not an annoyance.
+
+### The fix: stop depending on GitHub's timer
+
+`workflow_dispatch` is an API call, not a queued timer event. It is accepted or
+it returns an error. **There is no silent drop.** So the session is now started
+from Maverick's own machine, and GitHub's crons stay in place as a free
+fallback. Two independent paths; both must fail on the same day to lose it.
+
+**One-time setup (do this before the next session):**
+
+1. Create a token at <https://github.com/settings/personal-access-tokens/new>
+   - Resource owner: `MaverickThompson`
+   - Repository access: **only** `MaverickThompson/stock-agent`
+   - Permissions: **Actions -> Read and write**, nothing else
+   - Expiration: past **2026-12-22**, the last session of the study
+
+2. Store it, once, in your own user environment:
+   ```powershell
+   [Environment]::SetEnvironmentVariable('STUDY_DISPATCH_TOKEN','<token>','User')
+   ```
+   Then open a **new** PowerShell window.
+
+3. Register the scheduled task:
+   ```powershell
+   cd "$env:USERPROFILE\OneDrive\Work\hedge fund\stock-agent"
+   powershell -ExecutionPolicy Bypass -File scripts\install_dispatch_task.ps1
+   ```
+
+4. Prove it works, now, not tomorrow morning:
+   ```powershell
+   Start-ScheduledTask -TaskName 'Study session dispatch'
+   Get-Content logs\dispatch.log -Tail 20
+   ```
+   You want a line reading `run #NNN created`. A `204` alone is not proof; the
+   script polls for the run and says so explicitly.
+
+The task fires weekdays at **08:25** and again at **12:00** local. The 12:00
+firing is a catch-up and costs about ten seconds when the morning already
+recorded the day, because the eligibility guard exits early. `StartWhenAvailable`
+means a start missed with the laptop shut runs when the machine wakes.
+
+### Three ways you now find out
+
+| Layer | When | Depends on |
+|---|---|---|
+| Morning watch | 9:50am CT, weekdays | nothing but the public repo. Tells you while the market is still open, so the day can be rescued by hand. |
+| Evening check | ~5:16pm CT, weekdays | nothing but the public repo. Push and email. Reports misses AND lateness over 60 minutes. |
+| Watchdog in CI | 22:30 UTC, weekdays | GitHub's scheduler, so it can be silenced by the same failure it is meant to catch. Reports to Sentry. |
+
+The first two do not touch GitHub Actions and do not need your computer. That
+is the point: the thing that watches must not ride the thing that breaks.
+
+Before 2026-10-05 the evening check existed but its instructions said lateness
+was "documented and accepted, not a bug, just note it." That sentence is why
+two five-hour-late sessions went unreported. It has been removed.
+
+### Rescuing a day by hand
+
+While the market is open:
+
+1. <https://github.com/MaverickThompson/stock-agent/actions/workflows/study-session.yml>
+2. **Run workflow** -> branch `main` -> leave dry run unchecked -> green button.
+
+Hard deadline: nothing started after **3:00pm CT** can produce a session for
+that day. After the close the day is logged as a `SYSTEM_ERROR` row and the
+window extends; a missed day is never counted toward the 60.
+
+### What this does not change
+
+No parameter, gate, threshold, universe entry, position-sizing rule or log
+schema. Changing how a run is *started* is a Section 11 defect correction: it
+makes the protocol execute on the days it was always supposed to execute. It
+is not a change motivated by results, and it cannot make the data look better.
+
+---
+
 ## PART 1 — Fix these once, before anything else
 
 ### 1.1 Move the repository out of OneDrive  ← highest priority

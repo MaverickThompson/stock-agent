@@ -108,6 +108,7 @@ jobs:
           pip install -e .
 
       - name: Record the resolved dependency set
+        if: steps.guard.outputs.skip == 'false'
         # requirements.txt pins FLOORS, not exact versions, so CI resolves the
         # latest compatible release on every run. Over a 60-session study that
         # means the environment can drift underneath the protocol without any

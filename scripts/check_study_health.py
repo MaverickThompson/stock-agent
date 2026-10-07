@@ -28,6 +28,45 @@ class StudyHealthAlert(RuntimeError):
     """
 
 
+LATE_THRESHOLD_MINUTES = 60
+SESSIONS_CSV = ROOT / "study" / "sessions.csv"
+
+
+def session_lateness_minutes(market_date: dt.date,
+                             session_open: dt.time | None = None) -> float | None:
+    """Minutes between the market open and the session actually firing.
+
+    The watchdog's original check only asked *whether* a session happened. A
+    session that fires five hours after the open still sets last_session_date,
+    so it read as healthy -- which is exactly how 2026-10-01 (5h30m) and
+    2026-10-02 (5h03m) passed unnoticed. Timing is part of health, so it is
+    measured here. Returns None when there is no provenance row to measure.
+    """
+    try:
+        import csv
+        if not SESSIONS_CSV.exists():
+            return None
+        rows = list(csv.DictReader(SESSIONS_CSV.open(encoding="utf-8")))
+    except Exception:  # noqa: BLE001 - never let the watchdog die on its own telemetry
+        return None
+    stamps = []
+    for row in rows:
+        raw = (row.get("timestamp") or "").strip()
+        try:
+            fired = dt.datetime.strptime(raw, "%Y-%m-%dT%H:%M:%SZ").replace(
+                tzinfo=dt.timezone.utc)
+        except ValueError:
+            continue
+        if fired.astimezone(ZoneInfo("America/New_York")).date() == market_date:
+            stamps.append(fired)
+    if not stamps:
+        return None
+    opened = dt.datetime.combine(
+        market_date, session_open or dt.time(9, 30),
+        tzinfo=ZoneInfo("America/New_York"))
+    return (min(stamps) - opened).total_seconds() / 60.0
+
+
 def _alert(message: str, *, stage: str) -> None:
     """Report a watchdog finding to Sentry if a DSN is configured.
 
@@ -147,6 +186,21 @@ def check_study_health(
         )
         _write_summary(summary_path, message)
         return False
+
+    late = session_lateness_minutes(market_date)
+    if late is not None and late > LATE_THRESHOLD_MINUTES:
+        hrs, mins = divmod(int(late), 60)
+        message += (
+            f"\n\n### Late start\n\n"
+            f"The session fired **{hrs}h {mins:02d}m after the market open**, "
+            f"past the {LATE_THRESHOLD_MINUTES}-minute threshold. The day is "
+            f"recorded, but the entry prices are not the ones the protocol "
+            f"intended. Disclose this in the write-up."
+        )
+        _alert(
+            f"V2 session on {market_date.isoformat()} fired {hrs}h {mins:02d}m "
+            f"after the market open (threshold {LATE_THRESHOLD_MINUTES} min)",
+            stage="study_health_late_session")
 
     _write_summary(summary_path, message)
     return True
