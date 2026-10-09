@@ -35,30 +35,16 @@ name: Study session
 
 on:
   schedule:
-    - cron: "22 13 * * 1-5"
+# FALLBACK ONLY, set 2026-10-07 (Section 11 defect correction). The session is
+# started by an external scheduler POSTing to workflow_dispatch at 9:31am ET.
+# GitHub's own schedule events arrive 5-9 hours late on this repository, so
+# these three entries exist only to give a day a chance if that external
+# trigger fails. They sit inside the trading window in both daylight regimes;
+# the "Wait for market open" step absorbs the pre-open gap. See
+# scripts/fix_schedule_fallback.py for the measured data and the arithmetic.
     - cron: "26 13 * * 1-5"
-    - cron: "31 13 * * 1-5"
-    - cron: "35 13 * * 1-5"
-    - cron: "39 13 * * 1-5"
-    - cron: "43 13 * * 1-5"
-    - cron: "48 13 * * 1-5"
-    - cron: "14 14 * * 1-5"
-    - cron: "41 14 * * 1-5"
-    - cron: "7 15 * * 1-5"
-    - cron: "33 15 * * 1-5"
-    - cron: "59 15 * * 1-5"
-    - cron: "26 16 * * 1-5"
-    - cron: "52 16 * * 1-5"
-    - cron: "18 17 * * 1-5"
-    - cron: "44 17 * * 1-5"
-    - cron: "11 18 * * 1-5"
-    - cron: "37 18 * * 1-5"
-    - cron: "3 19 * * 1-5"
-    - cron: "29 19 * * 1-5"
-    - cron: "56 19 * * 1-5"
-    - cron: "22 20 * * 1-5"
-    - cron: "48 20 * * 1-5"
-    - cron: "14 21 * * 1-5"
+    - cron: "33 16 * * 1-5"
+    - cron: "11 19 * * 1-5"
   workflow_dispatch:
     inputs:
       dry_run:
@@ -76,7 +62,7 @@ permissions:
 jobs:
   session:
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 135
     steps:
       # ``ref: main`` is load-bearing, not decoration. The default checkout
       # pins to github.sha -- the tip at the moment the run was CREATED. Runs
@@ -115,10 +101,24 @@ jobs:
         # code change. This records exactly what ran, each day, so drift is
         # detectable after the fact instead of being invisible. Purely
         # observational -- it changes no decision parameter.
+        # Write-once per day. This step sits before the market-open wait, so it
+        # runs on EVERY eligible firing -- including the many that arrive
+        # outside market hours and do no session work. Rewriting the file each
+        # time changed it each time (pip freeze ordering), which staged a diff
+        # and produced a "study: session <date>" commit with no study content
+        # in it. Twenty such commits accumulated between 2026-10-06 and
+        # 2026-10-07 and made the history look like the session was running
+        # over and over. The dependency set for a given day does not change
+        # between firings, so recording it once is both correct and quiet.
         run: |
           mkdir -p study/env
-          python -m pip freeze > "study/env/$(date -u +%Y-%m-%d).txt"
-          python -c "import sys; print('python', sys.version.split()[0])" >> "study/env/$(date -u +%Y-%m-%d).txt"
+          stamp="study/env/$(date -u +%Y-%m-%d).txt"
+          if [ -f "$stamp" ]; then
+            echo "dependency set already recorded for today"
+          else
+            python -m pip freeze > "$stamp"
+            python -c "import sys; print('python', sys.version.split()[0])" >> "$stamp"
+          fi
 
       - name: Wait for market open
         id: market_open

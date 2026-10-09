@@ -67,9 +67,9 @@ def test_wait_skips_when_next_open_is_the_following_session():
     assert slept == []
 
 
-def test_wait_skips_when_next_open_exceeds_eight_minutes():
+def test_wait_skips_when_next_open_exceeds_the_wait_cap():
     now = dt.datetime(2026, 9, 24, 13, 20, tzinfo=dt.timezone.utc)
-    next_open = now + dt.timedelta(minutes=9)
+    next_open = now + dt.timedelta(minutes=91)
     slept = []
 
     ready = waiter.wait_until_open(
