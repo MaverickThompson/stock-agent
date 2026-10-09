@@ -74,20 +74,67 @@ def _crons() -> list[str]:
     return re.findall(r'- cron: "([^"]+)"', workflow)
 
 
-def test_the_session_is_attempted_many_times_a_day() -> None:
-    """One scheduled time cannot survive a scheduler that is hours late."""
-    assert len(_crons()) >= 12, (
-        "too few attempts to reliably land inside market hours")
 
 
-def test_attempts_span_both_dst_regimes() -> None:
-    """The window crosses 2026-11-01: the US open moves 13:30 -> 14:30 UTC."""
-    minutes = sorted(int(c.split()[1]) * 60 + int(c.split()[0]) for c in _crons())
-    assert minutes[0] <= 13 * 60 + 30, "no attempt before the EDT open"
-    assert minutes[-1] >= 20 * 60 + 0, "no attempt late enough for the EST session"
-    # No gap wide enough for a whole trading session to slip through.
-    gaps = [b - a for a, b in zip(minutes, minutes[1:])]
-    assert max(gaps) <= 35, f"largest gap between attempts is {max(gaps)} minutes"
+
+
+
+
+def test_workflow_dispatch_is_available() -> None:
+    """The primary trigger is an external POST to workflow_dispatch.
+
+    GitHub's schedule events arrive 5-9 hours late on this repository, so the
+    session is started by an external scheduler. Removing workflow_dispatch
+    would remove the only reliable way to start a day.
+    """
+    workflow = WORKFLOW.read_text(encoding="utf-8")
+    assert "workflow_dispatch:" in workflow, (
+        "workflow_dispatch is the primary trigger and must not be removed")
+
+
+def test_cron_is_a_thin_fallback_not_the_primary_trigger() -> None:
+    """Between two and six entries.
+
+    Fewer than two leaves no fallback if the external scheduler fails. More
+    than about six recreates the 2026-10-06 problem, where 24 late arrivals
+    produced 31 workflow runs for a single trading day and five cancellations
+    against the concurrency group.
+    """
+    crons = _crons()
+    assert 2 <= len(crons) <= 6, (
+        f"{len(crons)} cron entries; fallback should be a handful, not a swarm")
+
+
+def test_every_fallback_entry_can_reach_an_open_market() -> None:
+    """Each entry must be usable in both daylight regimes.
+
+    The study window crosses 2026-11-01: the US session is 13:30-20:00Z before
+    it and 14:30-21:00Z after. An entry is usable if it fires while the market
+    is open, or early enough that the in-job wait still catches the bell.
+    """
+    import re as _re
+
+    waiter = (pathlib.Path(__file__).parent.parent
+              / "scripts" / "wait_for_market_open.py").read_text(encoding="utf-8")
+    cap = _re.search(r"max_wait_seconds:\s*float\s*=\s*(\d+)\s*\*\s*60", waiter)
+    assert cap, "market-open wait bound is not explicit in minutes"
+    wait_minutes = int(cap.group(1))
+
+    for cron in _crons():
+        fired = _minute_of_day_for_test(cron)
+        for open_m, close_m, label in ((13 * 60 + 30, 20 * 60, "EDT"),
+                                       (14 * 60 + 30, 21 * 60, "EST")):
+            if open_m <= fired < close_m:
+                continue  # fires inside the session
+            gap = open_m - fired
+            assert 0 < gap <= wait_minutes, (
+                f"{cron} is unusable in {label}: fires {fired} min into the day, "
+                f"open at {open_m}, wait cap {wait_minutes} min")
+
+
+def _minute_of_day_for_test(cron: str) -> int:
+    parts = cron.split()
+    return int(parts[1]) * 60 + int(parts[0])
 
 
 def test_crons_avoid_the_top_of_the_hour() -> None:
@@ -118,6 +165,13 @@ def test_v2_eligibility_guard_uses_the_state_and_daily_marker(tmp_path) -> None:
     state_path = tmp_path / "v2_state.json"
     marker_path = tmp_path / "last_session.txt"
     output_path = tmp_path / "github_output.txt"
+    # An empty temp log, so this test does not consult the real study log.
+    signals_path = tmp_path / "signals.csv"
+    signals_path.write_text(
+        "timestamp,ticker,signal_type,triggered_rule,action_taken,"
+        "reason_if_rejected,price_at_signal,notes\n",
+        encoding="utf-8",
+    )
 
     active_state = {
         "schema_version": 1,
@@ -137,6 +191,7 @@ def test_v2_eligibility_guard_uses_the_state_and_daily_marker(tmp_path) -> None:
             [
                 sys.executable, str(script), "--today", today,
                 "--state", str(state_path), "--marker", str(marker_path),
+                "--signals", str(signals_path),
             ],
             check=True,
             capture_output=True,
@@ -159,6 +214,15 @@ def test_v2_eligibility_guard_uses_the_state_and_daily_marker(tmp_path) -> None:
 
     state_path.write_text(json.dumps(active_state), encoding="utf-8")
     marker_path.write_text("2026-09-29\n", encoding="utf-8")
+    assert "skip=true" in check("2026-09-29")
+
+    # A session that logged rows and then failed before writing the marker must
+    # not be re-run. This is the 2026-10-06 case: the marker stayed stale and
+    # four later cron arrivals re-logged the same twenty evaluations.
+    marker_path.write_text("", encoding="utf-8")
+    with signals_path.open("a", encoding="utf-8") as handle:
+        handle.write("2026-09-29T14:00:00Z,AAPL,entry_candidate,section5_gate,"
+                     "REJECTED,R:R 1.90 below the 2.0 floor,100.00,\n")
     assert "skip=true" in check("2026-09-29")
 
 
@@ -200,8 +264,8 @@ def test_wait_and_job_timeouts_leave_fetch_and_evaluation_room() -> None:
     assert timeout_match, "job timeout is not explicit"
     wait_minutes = int(wait_match.group(1))
     timeout_minutes = int(timeout_match.group(1))
-    assert wait_minutes == 8
-    assert timeout_minutes == 45
+    assert wait_minutes == 90
+    assert timeout_minutes == 135
     reserved_minutes = timeout_minutes - (wait_minutes + 6 + 20)
     assert reserved_minutes >= 10, (
         "timeout must reserve at least 10 minutes beyond wait, fetch, and evaluation")
