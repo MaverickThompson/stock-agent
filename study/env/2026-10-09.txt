@@ -20,8 +20,8 @@ packaging==26.3
 pandas==3.0.6
 pillow==12.3.0
 pluggy==1.6.0
-pydantic==2.13.5
-pydantic_core==2.46.5
+pydantic==2.14.0
+pydantic_core==2.50.0
 Pygments==2.21.0
 pyparsing==3.3.3
 pytest==9.1.1
@@ -34,10 +34,10 @@ scipy==1.18.1
 sentry-sdk==2.71.0
 six==1.17.0
 sseclient-py==1.9.0
--e git+https://github.com/MaverickThompson/stock-agent@dc1983fc394629273ac7074d254e56e065dd95c4#egg=stockagent
+-e git+https://github.com/MaverickThompson/stock-agent@506a724cb8c4908645bce12af56f8c1df8ed161c#egg=stockagent
 threadpoolctl==3.7.0
 typing-inspection==0.4.4
 typing_extensions==4.16.0
 urllib3==2.8.0
 websockets==17.2
-python 3.12.14
+python 3.12.15
