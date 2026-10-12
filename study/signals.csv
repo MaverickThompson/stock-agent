@@ -284,3 +284,24 @@ timestamp,ticker,signal_type,triggered_rule,action_taken,reason_if_rejected,pric
 2026-10-09T13:47:46Z,GEV,entry_candidate,section5_gate,REJECTED,ask 985.75 outside recorded entry zone 993.81-1008.85,985.75,quote 2026-10-09T13:47:46Z
 2026-10-09T13:48:14Z,WSM,entry_candidate,section5_gate,REJECTED,"cash would fall to -18.2%, below the 10% reserve",240.06,quote 2026-10-09T13:48:14Z
 2026-10-06T23:59:00Z,-,system,duplicate_session_logging,SYSTEM_ERROR,"Run #164 entered GLW and AVGO then exited non-zero, so v2_state.json and last_session.txt were not staged. Four later cron arrivals (#165, #171, #172, #173) re-ran the full session and re-logged the same 20 evaluations, giving 100 rows for this date instead of 20. No position opened twice -- the duplicate_entry_action guard skipped both re-entries and trades.csv holds 2 rows. Rows are retained per Rule 8 (append-only); rejection statistics for this date must be computed on de-duplicated rows.",,logged per Section 10; guard corrected by scripts/fix_rerun_guard.py
+2026-10-12T13:38:54Z,GLW,exit,stop,EXITED,,150.18,qty 64 of 64; quote 2026-10-12T13:38:53Z
+2026-10-12T13:39:34Z,CIEN,entry_candidate,layer2_debate,REJECTED,layer 2 produced no thesis,,
+2026-10-12T13:40:07Z,FLEX,entry_candidate,section5_gate,REJECTED,ask 126.00 outside recorded entry zone 118.05-120.12,126,quote 2026-10-12T13:40:02Z
+2026-10-12T13:40:41Z,CSCO,entry_candidate,section5_gate,REJECTED,"cash would fall to -12.2%, below the 10% reserve",116.85,quote 2026-10-12T13:40:41Z
+2026-10-12T13:41:21Z,CNC,entry_candidate,layer2_debate,REJECTED,layer 2 produced no thesis,,
+2026-10-12T13:41:49Z,STLD,entry_candidate,section5_gate,REJECTED,R:R 1.84 below the 2.0 floor,240.17,quote 2026-10-12T13:41:47Z
+2026-10-12T13:42:26Z,NUE,entry_candidate,section5_gate,REJECTED,ask 256.89 outside recorded entry zone 251.69-254.53,256.89,quote 2026-10-12T13:42:25Z
+2026-10-12T13:42:55Z,FIX,entry_candidate,layer2_debate,REJECTED,layer 2 produced no thesis,,
+2026-10-12T13:43:29Z,AMAT,entry_candidate,section5_gate,REJECTED,ask 517.11 outside recorded entry zone 491.96-499.22,517.11,quote 2026-10-12T13:43:25Z
+2026-10-12T13:43:57Z,PWR,entry_candidate,section5_gate,REJECTED,R:R 1.74 below the 2.0 floor,704.32,quote 2026-10-12T13:43:54Z
+2026-10-12T13:44:17Z,ABNB,entry_candidate,layer2_debate,REJECTED,layer 2 produced no thesis,,
+2026-10-12T13:44:44Z,CAH,entry_candidate,section5_gate,REJECTED,R:R 1.90 below the 2.0 floor,240.38,quote 2026-10-12T13:44:42Z
+2026-10-12T13:45:14Z,HAS,entry_candidate,section5_gate,REJECTED,ask 94.02 outside recorded entry zone 93.01-93.90,94.02,quote 2026-10-12T13:45:07Z
+2026-10-12T13:45:41Z,TRGP,entry_candidate,section5_gate,REJECTED,R:R 1.82 below the 2.0 floor,291.89,quote 2026-10-12T13:45:39Z
+2026-10-12T13:46:14Z,HST,entry_candidate,section5_gate,REJECTED,ask 22.59 outside recorded entry zone 22.65-22.81,22.59,quote 2026-10-12T13:46:13Z
+2026-10-12T13:46:42Z,BAX,entry_candidate,section5_gate,REJECTED,R:R 1.98 below the 2.0 floor,24.43,quote 2026-10-12T13:46:41Z
+2026-10-12T13:47:14Z,FDS,entry_candidate,layer2_debate,REJECTED,layer 2 produced no thesis,,
+2026-10-12T13:47:43Z,DG,entry_candidate,section5_gate,REJECTED,ask 126.12 outside recorded entry zone 126.83-128.25,126.12,quote 2026-10-12T13:47:03Z
+2026-10-12T13:48:08Z,FANG,entry_candidate,section5_gate,REJECTED,ask 200.00 outside recorded entry zone 194.50-196.50,200,quote 2026-10-12T13:48:07Z
+2026-10-12T13:48:40Z,KDP,entry_candidate,section5_gate,REJECTED,R:R 1.85 below the 2.0 floor,31.87,quote 2026-10-12T13:48:38Z
+2026-10-12T13:49:22Z,EXPD,entry_candidate,section5_gate,REJECTED,ask 205.43 outside recorded entry zone 193.32-194.84,205.43,quote 2026-10-12T13:49:21Z
