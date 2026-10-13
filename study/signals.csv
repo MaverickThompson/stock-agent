@@ -305,3 +305,24 @@ timestamp,ticker,signal_type,triggered_rule,action_taken,reason_if_rejected,pric
 2026-10-12T13:48:08Z,FANG,entry_candidate,section5_gate,REJECTED,ask 200.00 outside recorded entry zone 194.50-196.50,200,quote 2026-10-12T13:48:07Z
 2026-10-12T13:48:40Z,KDP,entry_candidate,section5_gate,REJECTED,R:R 1.85 below the 2.0 floor,31.87,quote 2026-10-12T13:48:38Z
 2026-10-12T13:49:22Z,EXPD,entry_candidate,section5_gate,REJECTED,ask 205.43 outside recorded entry zone 193.32-194.84,205.43,quote 2026-10-12T13:49:21Z
+2026-10-13T13:38:07Z,AVGO,exit,stop,EXITED,,350.94,qty 46 of 46; quote 2026-10-13T13:38:04Z
+2026-10-13T13:38:27Z,STLD,entry_candidate,section5_gate,REJECTED,R:R 1.89 below the 2.0 floor,241.86,quote 2026-10-13T13:38:25Z
+2026-10-13T13:38:53Z,CSCO,entry_candidate,section5_gate,REJECTED,ask 114.57 outside recorded entry zone 112.96-114.11,114.57,quote 2026-10-13T13:38:53Z
+2026-10-13T13:39:20Z,NUE,entry_candidate,section5_gate,REJECTED,ask 263.34 outside recorded entry zone 252.02-254.75,263.34,quote 2026-10-13T13:39:11Z
+2026-10-13T13:39:48Z,DLTR,entry_candidate,section5_gate,ENTERED,,119.12,144 shares; stop 112.68; quote 2026-10-13T13:39:42Z; order ff862eca-a236-4608-a39e-85a954f25383; client_order_id=v2-20261013-1cf17e25c7c8cd5c11598c98ac3f1c4d
+2026-10-13T13:40:12Z,CNC,entry_candidate,section5_gate,REJECTED,ask 72.16 outside recorded entry zone 68.40-69.26,72.16,quote 2026-10-13T13:40:08Z
+2026-10-13T13:40:33Z,TRGP,entry_candidate,section5_gate,REJECTED,R:R 1.98 below the 2.0 floor,291.42,quote 2026-10-13T13:40:28Z
+2026-10-13T13:40:54Z,BAX,entry_candidate,layer2_debate,REJECTED,layer 2 produced no thesis,,
+2026-10-13T13:41:11Z,FANG,entry_candidate,layer2_debate,REJECTED,layer 2 produced no thesis,,
+2026-10-13T13:41:32Z,GM,entry_candidate,section5_gate,REJECTED,R:R 1.77 below the 2.0 floor,83.64,quote 2026-10-13T13:41:28Z
+2026-10-13T13:41:51Z,KDP,entry_candidate,layer2_debate,REJECTED,layer 2 produced no thesis,,
+2026-10-13T13:42:11Z,CAH,entry_candidate,section5_gate,REJECTED,ask 239.34 outside recorded entry zone 239.67-241.92,239.34,quote 2026-10-13T13:42:00Z
+2026-10-13T13:42:29Z,FDS,entry_candidate,layer2_debate,REJECTED,layer 2 produced no thesis,,
+2026-10-13T13:42:51Z,HAS,entry_candidate,section5_gate,REJECTED,ask 97.25 outside recorded entry zone 95.30-96.18,97.25,quote 2026-10-13T13:42:42Z
+2026-10-13T13:43:13Z,OXY,entry_candidate,section5_gate,REJECTED,p 0.319 below breakeven+10pp (0.430),61.35,quote 2026-10-13T13:43:11Z
+2026-10-13T13:43:34Z,EL,entry_candidate,section5_gate,ENTERED,,99.65,167 shares; stop 94.05; quote 2026-10-13T13:43:23Z; order f2c7d0ac-a8ee-40b5-8318-6510bd70f174; client_order_id=v2-20261013-b06b22b5d5506a74e24d777e0b34a78b
+2026-10-13T13:43:53Z,PWR,entry_candidate,section5_gate,REJECTED,ask 688.54 outside recorded entry zone 676.42-686.05,688.54,quote 2026-10-13T13:43:40Z
+2026-10-13T13:44:17Z,LLY,entry_candidate,section5_gate,REJECTED,p 0.402 below breakeven+10pp (0.406),1184.28,quote 2026-10-13T13:44:14Z
+2026-10-13T13:44:47Z,OKE,entry_candidate,layer2_debate,REJECTED,layer 2 produced no thesis,,
+2026-10-13T13:45:01Z,ABNB,entry_candidate,section5_gate,REJECTED,ask 166.20 outside recorded entry zone 163.63-165.53,166.2,quote 2026-10-13T13:44:57Z
+2026-10-13T13:45:21Z,HST,entry_candidate,layer2_debate,REJECTED,layer 2 produced no thesis,,
