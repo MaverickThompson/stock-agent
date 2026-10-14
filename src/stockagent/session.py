@@ -238,6 +238,10 @@ class SessionResult:
     exited: int = 0
     rejected: int = 0
     errors: int = 0
+    #: Exits the protocol told us to postpone (Section 7 stale quote).
+    #: Logged as SYSTEM_ERROR but NOT a session error: the session did
+    #: its job, the fill moves to the next regular session.
+    deferred: int = 0
     skipped: int = 0
     #: True once the market was confirmed open and the session actually
     #: evaluated the day. The caller uses this to record that the market day is
@@ -247,7 +251,7 @@ class SessionResult:
     def summary(self) -> str:
         return (f"entered={self.entered} exited={self.exited} "
                 f"rejected={self.rejected} skipped={self.skipped} "
-                f"errors={self.errors} ran={self.ran}")
+                f"errors={self.errors} deferred={self.deferred} ran={self.ran}")
 
 
 def run_session(*, broker: BrokerLike, log: StudyLog,
@@ -386,10 +390,23 @@ def run_session(*, broker: BrokerLike, log: StudyLog,
                 open_positions.remove(position)
             result.exited += 1
         except Exception as exc:  # noqa: BLE001 - logged, never fatal
-            LOG.exception("exit handling failed for %s", position.ticker)
+            # Section 7 says a stale quote defers the fill to the next regular
+            # session. That is the protocol working, not the session failing,
+            # so it is counted separately and does not void the day.
+            # Matched by name: session.py stays broker-agnostic (BrokerLike is
+            # a Protocol) and must not import the Alpaca-backed broker module.
+            is_deferral = any(cls.__name__ == "StaleQuote"
+                              for cls in type(exc).__mro__)
+            if not is_deferral:
+                LOG.exception("exit handling failed for %s", position.ticker)
+            else:
+                LOG.warning("exit deferred for %s: %s", position.ticker, exc)
             log.log_system_error(stage="exit", detail=f"{type(exc).__name__}: {exc}",
                                  ticker=position.ticker)
-            result.errors += 1
+            if is_deferral:
+                result.deferred += 1
+            else:
+                result.errors += 1
 
     # -- 2. new entries -----------------------------------------------------
     account_error: str | None = None

@@ -147,10 +147,25 @@ def test_save_atomically_round_trips_state(tmp_path):
     assert set(path.parent.iterdir()) == {path}
 
 
-def test_initial_state_file_has_zero_progress():
+def test_live_state_file_is_well_formed_and_only_moves_forward():
+    """The live state file is written by every session, so it cannot be
+    asserted to be pristine. What must hold is that it stays coherent:
+    the start date is frozen, progress never goes backwards or past the
+    target, and a session count implies a session date.
+
+    (Was `test_initial_state_file_has_zero_progress`, which asserted
+    completed_sessions == 0 and failed from the first real session onward.
+    Section 11 defect correction, 2026-10-14 - a broken test, not a broken
+    study.)"""
     state = StudyState.load("study/v2_state.json")
 
-    assert state.start_date == dt.date(2026, 9, 29)
-    assert state.completed_sessions == 0
-    assert state.last_session_date is None
+    assert state.start_date == dt.date(2026, 9, 29), "the start date is frozen"
     assert state.status == "active"
+    assert 0 <= state.completed_sessions <= V2_SESSION_TARGET
+    if state.completed_sessions == 0:
+        assert state.last_session_date is None
+    else:
+        assert state.last_session_date is not None, (
+            "a counted session must have a date - a count with no date is the "
+            "orphan-row defect of 2026-10-14")
+        assert state.last_session_date >= state.start_date
