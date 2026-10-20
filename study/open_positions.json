@@ -30,21 +30,5 @@
     "target_2": 124.3358,
     "thesis": "entry 99.50-100.71, stop 94.05, T1 112.22, T2 124.34, p=0.53; ATR(2.0x) stop, fixed-fractional sizing",
     "ticker": "EL"
-  },
-  {
-    "direction": "long",
-    "entry_price": 241.81,
-    "entry_timestamp": "2026-10-15T13:39:05Z",
-    "invalidation": "Enter no higher than 243.36 (0.5% slippage cap); Stop at 229.21 placed at entry, not mentally; First target 268.03 (2.00R); Maximum loss 1000.00 = 1.00% of equity; Falsification trigger -- the thesis is wrong if any of these occur: a close below 229.21 (2x ATR under entry); OR a close below the 50-day EMA at 237.76; OR the HMM posterior for Bull/Recovery dropping under 40%; OR VIX closing above 30; Standing caveat (model): Model diagnostic: no state resembles Bear. The training window contains no such regime, so this model cannot ever signal one -- treat its silence about Bear as absence of evidence, not evidence of absence; Standing caveat (model): Model diagnostic: no state resembles Recovery. The training window contains no such regime, so this model cannot ever signal one -- treat its silence about Recovery as absence of evidence, not evidence of absence; Standing caveat (model): The model is structurally blind here: no state resembles Bear. The training window contains no such regime, so this model cannot ever signal one -- treat its silence about Bear as absence of evidence, not evidence of absence; Standing caveat (model): The model is structurally blind here: no state resembles Recovery. The training window contains no such regime, so this model cannot ever signal one -- treat its silence about Recovery as absence of evidence, not evidence of absence",
-    "position_id": "v2-20261015-5438672a1a28bcee5a66df760850b49f",
-    "remaining": 73,
-    "size": 73,
-    "stop": 229.2075277911519,
-    "target_1": 268.0349,
-    "target_1_filled": 0,
-    "target_1_hit": false,
-    "target_2": 293.9199,
-    "thesis": "entry 240.86-243.44, stop 229.21, T1 268.03, T2 293.92, p=0.46; ATR(2.0x) stop, fixed-fractional sizing",
-    "ticker": "STLD"
   }
 ]
