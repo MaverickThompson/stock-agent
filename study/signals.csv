@@ -491,3 +491,23 @@ timestamp,ticker,signal_type,triggered_rule,action_taken,reason_if_rejected,pric
 2026-10-23T13:43:01Z,FITB,entry_candidate,section5_gate,REJECTED,R:R 1.77 below the 2.0 floor,52.93,quote 2026-10-23T13:43:01Z
 2026-10-23T13:43:18Z,WDAY,entry_candidate,section5_gate,REJECTED,ask 209.01 outside recorded entry zone 209.21-211.96,209.01,quote 2026-10-23T13:43:16Z
 2026-10-23T13:43:38Z,MNST,entry_candidate,layer2_debate,REJECTED,layer 2 produced no thesis,,
+2026-10-26T13:39:16Z,TRGP,entry_candidate,section5_gate,REJECTED,"cash would fall to -6.6%, below the 10% reserve",302.41,quote 2026-10-26T13:39:14Z
+2026-10-26T13:39:49Z,CNC,entry_candidate,section5_gate,REJECTED,ask 73.29 outside recorded entry zone 69.65-70.49,73.29,quote 2026-10-26T13:39:45Z
+2026-10-26T13:40:21Z,REGN,entry_candidate,section5_gate,REJECTED,ask 818.83 outside recorded entry zone 810.28-818.54,818.83,quote 2026-10-26T13:40:18Z
+2026-10-26T13:40:48Z,SLB,entry_candidate,layer2_debate,REJECTED,layer 2 produced no thesis,,
+2026-10-26T13:41:23Z,LLY,entry_candidate,section5_gate,REJECTED,ask 1322.00 outside recorded entry zone 1276.76-1291.62,1322,quote 2026-10-26T13:41:23Z
+2026-10-26T13:41:55Z,BMY,entry_candidate,layer2_debate,REJECTED,layer 2 produced no thesis,,
+2026-10-26T13:42:23Z,HIG,entry_candidate,section5_gate,REJECTED,ask 138.22 outside recorded entry zone 136.27-137.25,138.22,quote 2026-10-26T13:41:44Z
+2026-10-26T13:42:54Z,OKE,entry_candidate,layer2_debate,REJECTED,layer 2 produced no thesis,,
+2026-10-26T13:43:24Z,DLTR,entry_candidate,section5_gate,REJECTED,R:R 1.93 below the 2.0 floor,126.31,quote 2026-10-26T13:43:20Z
+2026-10-26T13:43:53Z,NUE,entry_candidate,section5_gate,REJECTED,ask 268.59 outside recorded entry zone 257.45-260.49,268.59,quote 2026-10-26T13:43:51Z
+2026-10-26T13:44:18Z,LYB,entry_candidate,layer2_debate,REJECTED,layer 2 produced no thesis,,
+2026-10-26T13:44:32Z,KVUE,entry_candidate,section5_gate,REJECTED,R:R 1.80 below the 2.0 floor,19.67,quote 2026-10-26T13:44:30Z
+2026-10-26T13:45:02Z,HAL,entry_candidate,section5_gate,REJECTED,R:R 1.89 below the 2.0 floor,34.91,quote 2026-10-26T13:45:02Z
+2026-10-26T13:45:28Z,SJM,entry_candidate,layer2_debate,REJECTED,layer 2 produced no thesis,,
+2026-10-26T13:45:54Z,CAH,entry_candidate,section5_gate,REJECTED,ask 263.05 outside recorded entry zone 250.21-252.33,263.05,quote 2026-10-26T13:45:53Z
+2026-10-26T13:46:28Z,LUV,entry_candidate,section5_gate,REJECTED,R:R 1.78 below the 2.0 floor,42.49,quote 2026-10-26T13:46:28Z
+2026-10-26T13:46:56Z,AIZ,entry_candidate,section5_gate,REJECTED,ask 288.94 outside recorded entry zone 285.60-287.60,288.94,quote 2026-10-26T13:46:00Z
+2026-10-26T13:47:25Z,VRTX,entry_candidate,layer2_debate,REJECTED,layer 2 produced no thesis,,
+2026-10-26T13:47:47Z,FANG,entry_candidate,section5_gate,REJECTED,ask 207.16 outside recorded entry zone 204.59-206.80,207.16,quote 2026-10-26T13:47:46Z
+2026-10-26T13:48:11Z,JNJ,entry_candidate,layer2_debate,REJECTED,layer 2 produced no thesis,,
