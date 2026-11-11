@@ -735,3 +735,23 @@ timestamp,ticker,signal_type,triggered_rule,action_taken,reason_if_rejected,pric
 2026-11-10T14:43:39Z,DLTR,entry_candidate,layer2_debate,REJECTED,layer 2 produced no thesis,,
 2026-11-10T14:43:58Z,UAL,entry_candidate,section5_gate,REJECTED,p 0.340 below breakeven+10pp (0.418),120.44,quote 2026-11-10T14:43:50Z
 2026-11-10T14:44:17Z,BNY,entry_candidate,layer2_debate,REJECTED,layer 2 produced no thesis,,
+2026-11-11T14:39:33Z,TGT,entry_candidate,layer2_debate,REJECTED,layer 2 produced no thesis,,
+2026-11-11T14:39:53Z,BAX,entry_candidate,layer2_debate,REJECTED,layer 2 produced no thesis,,
+2026-11-11T14:40:16Z,LUV,entry_candidate,layer2_debate,REJECTED,layer 2 produced no thesis,,
+2026-11-11T14:40:30Z,ANET,entry_candidate,layer2_debate,REJECTED,layer 2 produced no thesis,,
+2026-11-11T14:40:48Z,DE,entry_candidate,section5_gate,REJECTED,p 0.406 below breakeven+10pp (0.429),684.18,quote 2026-11-11T14:40:43Z
+2026-11-11T14:41:09Z,TECH,entry_candidate,layer2_debate,REJECTED,layer 2 produced no thesis,,
+2026-11-11T14:41:28Z,CAH,entry_candidate,section5_gate,REJECTED,R:R 1.99 below the 2.0 floor,276.84,quote 2026-11-11T14:41:06Z
+2026-11-11T14:41:50Z,DAL,entry_candidate,layer2_debate,REJECTED,layer 2 produced no thesis,,
+2026-11-11T14:42:10Z,FDX,entry_candidate,section5_gate,REJECTED,ask 325.00 outside recorded entry zone 318.32-321.55,325,quote 2026-11-11T14:41:57Z
+2026-11-11T14:42:28Z,JNJ,entry_candidate,layer2_debate,REJECTED,layer 2 produced no thesis,,
+2026-11-11T14:42:45Z,DG,entry_candidate,layer2_debate,REJECTED,layer 2 produced no thesis,,
+2026-11-11T14:43:03Z,UAL,entry_candidate,layer2_debate,REJECTED,layer 2 produced no thesis,,
+2026-11-11T14:43:22Z,MRK,entry_candidate,layer2_debate,REJECTED,layer 2 produced no thesis,,
+2026-11-11T14:43:44Z,DLTR,entry_candidate,layer2_debate,REJECTED,layer 2 produced no thesis,,
+2026-11-11T14:44:06Z,BEN,entry_candidate,section5_gate,REJECTED,R:R 1.91 below the 2.0 floor,36.23,quote 2026-11-11T14:44:06Z
+2026-11-11T14:44:19Z,ABNB,entry_candidate,section5_gate,REJECTED,ask 189.06 outside recorded entry zone 178.73-181.50,189.06,quote 2026-11-11T14:42:58Z
+2026-11-11T14:44:38Z,NTRS,system,entry,SYSTEM_ERROR,"StaleQuote: NTRS: quote 590s old, limit 90s - fill deferred to the next regular session per Section 7",,logged per Section 10
+2026-11-11T14:44:55Z,SW,entry_candidate,layer2_debate,REJECTED,layer 2 produced no thesis,,
+2026-11-11T14:45:12Z,CF,entry_candidate,layer2_debate,REJECTED,layer 2 produced no thesis,,
+2026-11-11T14:45:33Z,WAB,entry_candidate,section5_gate,REJECTED,ask 304.67 outside recorded entry zone 300.68-304.14,304.67,quote 2026-11-11T14:45:31Z
