@@ -30,21 +30,5 @@
     "target_2": 124.3358,
     "thesis": "entry 99.50-100.71, stop 94.05, T1 112.22, T2 124.34, p=0.53; ATR(2.0x) stop, fixed-fractional sizing",
     "ticker": "EL"
-  },
-  {
-    "direction": "long",
-    "entry_price": 46.72,
-    "entry_timestamp": "2026-11-10T14:39:17Z",
-    "invalidation": "Enter no higher than 46.96 (0.5% slippage cap); Stop at 43.33 placed at entry, not mentally; First target 53.53 (2.00R); Maximum loss 1000.00 = 1.00% of equity; Falsification trigger -- the thesis is wrong if any of these occur: a close below 43.33 (2x ATR under entry); OR a close below the 50-day EMA at 42.58; OR the HMM posterior for Bull/Recovery dropping under 40%; OR VIX closing above 30; Recovery regime: half the sized position, or wait for Bull; Standing caveat (model): Model diagnostic: no state resembles HighVolatility. The training window contains no such regime, so this model cannot ever signal one -- treat its silence about HighVolatility as absence of evidence, not evidence of absence; Standing caveat (model): The model is structurally blind here: no state resembles HighVolatility. The training window contains no such regime, so this model cannot ever signal one -- treat its silence about HighVolatility as absence of evidence, not evidence of absence; Standing caveat (model): Baum-Welch restarts disagree by 750 nats. The fit is one of several very different local optima, so the regime map is not a stable object",
-    "position_id": "v2-20261110-4ce43b28996b3b7992011a30a00c13fc",
-    "remaining": 284,
-    "size": 284,
-    "stop": 43.33231511818751,
-    "target_1": 53.5254,
-    "target_1_filled": 0,
-    "target_1_hit": false,
-    "target_2": 60.3207,
-    "thesis": "entry 46.39-47.07, stop 43.33, T1 53.53, T2 60.32, p=0.47; ATR(2.0x) stop, fixed-fractional sizing",
-    "ticker": "LUV"
   }
 ]
