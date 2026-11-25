@@ -14,5 +14,21 @@
     "target_2": 124.3358,
     "thesis": "entry 99.50-100.71, stop 94.05, T1 112.22, T2 124.34, p=0.53; ATR(2.0x) stop, fixed-fractional sizing",
     "ticker": "EL"
+  },
+  {
+    "direction": "long",
+    "entry_price": 429.31,
+    "entry_timestamp": "2026-11-25T14:46:34Z",
+    "invalidation": "Enter no higher than 432.49 (0.5% slippage cap); Stop at 412.21 placed at entry, not mentally; First target 466.59 (2.00R); Maximum loss 1000.00 = 1.00% of equity; Falsification trigger -- the thesis is wrong if any of these occur: a close below 412.21 (2x ATR under entry); OR a close below the 50-day EMA at 401.66; OR the HMM posterior for Bull/Recovery dropping under 40%; OR VIX closing above 30; Standing caveat (model): Model diagnostic: no state resembles Bear. The training window contains no such regime, so this model cannot ever signal one -- treat its silence about Bear as absence of evidence, not evidence of absence; Standing caveat (model): Model diagnostic: no state resembles Recovery. The training window contains no such regime, so this model cannot ever signal one -- treat its silence about Recovery as absence of evidence, not evidence of absence; Standing caveat (model): The model is structurally blind here: no state resembles Bear. The training window contains no such regime, so this model cannot ever signal one -- treat its silence about Bear as absence of evidence, not evidence of absence; Standing caveat (model): The model is structurally blind here: no state resembles Recovery. The training window contains no such regime, so this model cannot ever signal one -- treat its silence about Recovery as absence of evidence, not evidence of absence",
+    "position_id": "v2-20261125-a1cbd736f7541f8f120d731990087c35",
+    "remaining": 53,
+    "size": 53,
+    "stop": 412.2140593770118,
+    "target_1": 466.5919,
+    "target_1_filled": 0,
+    "target_1_hit": false,
+    "target_2": 502.8437,
+    "thesis": "entry 428.53-432.15, stop 412.21, T1 466.59, T2 502.84, p=0.49; ATR(2.0x) stop, fixed-fractional sizing",
+    "ticker": "EG"
   }
 ]
